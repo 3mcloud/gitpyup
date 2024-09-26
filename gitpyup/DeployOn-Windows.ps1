@@ -13,7 +13,7 @@ $Env:REPO = $repo
 # shortcut parent depends on installation type
 $env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$repo"
 $env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$repo"
-$ToRemove = @(
+$toRemove = @(
     "$env:GITPYUP_SHORTCUT_PARENT_USER\$repo-update.lnk",
     "$env:GITPYUP_SHORTCUT_PARENT_USER\$repo-uninstall.lnk"
     "$env:GITPYUP_SHORTCUT_PARENT_ALL\$repo-update.lnk",
@@ -30,8 +30,8 @@ $logPath    = Join-Path -Path $sharepath -ChildPath $filename
 
 $shortcutScript = {
     param(
-        [array]$ToRemove,
-        [array]$ToAdd
+        [array]$toRemove,
+        [array]$toAdd
     )
 
     . "./Utility-Functions.ps1"
@@ -39,7 +39,7 @@ $shortcutScript = {
 
     # TODO: check if have permissions to remove, if needed get permissions, ideally from existing elevated process
     # remove old shortcuts
-    foreach ($shortcut in $ToRemove) {
+    foreach ($shortcut in $toRemove) {
         if (Test-Path $shortcut) {
             Write-Log "Removing start menu shortcut '$shortcut'"
             Remove-Item -Force $shortcut
@@ -47,7 +47,7 @@ $shortcutScript = {
     }
 
     # create shortcut's parent directory if it does not exist
-    $shortcutParent = Split-Path -Path $ToAdd[0]['shortcut_path'] -Parent
+    $shortcutParent = Split-Path -Path $toAdd[0]['shortcut_path'] -Parent
     if (!(Test-Path $shortcutParent)) {
         New-Item -Path $shortcutParent -ItemType "directory" -Force
     }
@@ -55,8 +55,8 @@ $shortcutScript = {
     # initialize shortcut creation
     $shell = New-Object -ComObject WScript.Shell
     
-    # loop through each shortcut in $ToAdd
-    foreach ($item in $ToAdd) {
+    # loop through each shortcut in $toAdd
+    foreach ($item in $toAdd) {
         $shortcutPath = $item['shortcut_path']
         Write-Log "Creating or updating start menu shortcut '$shortcutPath'"
         $shortcut = $shell.CreateShortcut($shortcutPath)
@@ -199,7 +199,7 @@ On most devices this means rigth click and select 'run with PowerShell'"
     }
 }
 
-# make sure running from gitpyup repo if installed
+# determine install type
 $installedAll = Test-Path "$env:ProgramData\$repo"
 if ($installedAll) {
     $installType = "AllUsers"
@@ -212,10 +212,11 @@ if ($installedAll) {
     $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
 }
 
+# if installed, make sure running script from the installed location
 $updateShortcutPath = "$shortcutParent\$repo-update.lnk"
 $shortcutExists = Test-Path $updateShortcutPath
 $runFromInstalled = (Get-Location).Path -eq "$installPath\$repo"
-$installed = Test-Path "$installPath\$repo"
+$installed = Test-Path "$installPath\$repo"  # the gitpyup/gitpyup directory
 if ($installed -and $shortcutExists -and !($runFromInstalled)) {
     Write-LogOrHost "Error: $repo allready installed.
 Must run the startmenu shortcut '$repo-update' to update.
@@ -344,28 +345,28 @@ applications = @{
 }
 
 # make git use deploy key
-$DeployKeyPath = Convert-Path "$($repo)_deploy_key"
-$Env:GIT_SSH_COMMAND = "ssh -i '$DeployKeyPath' -o IdentitiesOnly=yes"
+$deployKeyPath = Convert-Path "$($repo)_deploy_key"
+$Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
 
 # Adding github.com and github.mmm.com to known_hosts file avoids prompt to add key during 1st install.
 
 # create empty known_hosts file if it does not exist
-$KnownHosts = "$env:USERPROFILE\.ssh\known_hosts"
-if (!(Test-Path $KnownHosts)) {
+$knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
+if (!(Test-Path $knownHosts)) {
     Write-Log "creating known_hosts file..."
-    New-Item -Path $KnownHosts -ItemType File -Force
+    New-Item -Path $knownHosts -ItemType File -Force
 }
 
 # update known_hosts file with github.com and github.mmm.com keys
-$KnownHostsContent = Get-Content $KnownHosts
-$Sites = @("github.com", "github.mmm.com")
-foreach ($Site in $Sites){
-    $KnownHostsContent = $KnownHostsContent | Select-String -Pattern $Site -NotMatch | Select-Object -expa line
-    Write-Log "adding $Site to known_hosts file."
-    $SiteKeys = ssh-keyscan $Site
-    $KnownHostsContent = $KnownHostsContent + $SiteKeys
+$knownHostsContent = Get-Content $knownHosts
+$sites = @("github.com", "github.mmm.com")
+foreach ($site in $sites){
+    $knownHostsContent = $knownHostsContent | Select-String -Pattern $site -NotMatch | Select-Object -expa line
+    Write-Log "adding $site to known_hosts file."
+    $siteKeys = ssh-keyscan $site
+    $knownHostsContent = $knownHostsContent + $siteKeys
 }
-Set-Content -Path $KnownHosts -Value $KnownHostsContent
+Set-Content -Path $knownHosts -Value $knownHostsContent
 
 if (Test-Path "$($repo)_deploy_key") {
     # fix permissions on deploy key
@@ -412,12 +413,12 @@ if (git rev-parse --is-inside-work-tree) {
     Set-Location "scripts"
 } else {
     # Install for all users or current user
-    $Confirm = ""
-    while(($Confirm -ne "y") -and ($Confirm -ne "n"))
+    $confirm = ""
+    while(($confirm -ne "y") -and ($confirm -ne "n"))
     {
-        $Confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
+        $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
     }
-    if ($Confirm -eq "y") {
+    if ($confirm -eq "y") {
         # all users
         Set-Location $env:ProgramData
         $installType = "AllUsers"
@@ -437,14 +438,14 @@ if (git rev-parse --is-inside-work-tree) {
         git checkout dev
     }
 
-    Copy-Item $DeployKeyPath .
+    Copy-Item $deployKeyPath .
     Copy-Item $utilityFunctionsPath .
     Write-Log "The deploy key and script have been copied to the appdata directory.
         You may delete your downloaded copy.
     "
     
     # shortcut creation
-    $ToAdd = @(
+    $toAdd = @(
         @{ "shortcut_path" = "$shortcutParent\$repo-update.lnk";
            "script_name" = "$repo-deploy-windows.ps1";
            "target_path" = "powershell.exe";
@@ -454,7 +455,7 @@ if (git rev-parse --is-inside-work-tree) {
            "target_path" = "powershell.exe";
            "working_directory" = "."}
     )
-    $shortcutArgs = $ToRemove, $ToAdd
+    $shortcutArgs = $toRemove, $toAdd
     $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
 
     if ($installType -eq "AllUsers") {
@@ -474,22 +475,22 @@ if (git rev-parse --is-inside-work-tree) {
 
 # set permissions on the notebooks directory
 if ($installType -eq "AllUsers") {
-    $NotebooksPath = "$installPath\notebooks"
-    icacls $NotebooksPath /grant:r "Users:(OI)(CI)F" /T
+    $notebooksPath = "$installPath\notebooks"
+    icacls $notebooksPath /grant:r "Users:(OI)(CI)F" /T
 } 
 
 $env:GITPYUP_SHORTCUT_PARENT = $shortcutParent
 $env:GITPYUP_INSTALL_PARENT = Split-Path -Path $installPath -Parent
 
-$Confirm = ""
-while(($Confirm -ne "y") -and ($Confirm -ne "n"))
+$confirm = ""
+while(($confirm -ne "y") -and ($confirm -ne "n"))
 {
-    $Confirm = Read-Host -Prompt "Do you want to install or update National Instruments drivers? (y/n)"
-    if ($Confirm -eq "y") {
-        $Proc = Start-Process -FilePath "powershell" -Verb RunAs -PassThru -ArgumentList "-Command & '.\ni-setup-windows.ps1'"
-        $Handle = $Proc.Handle
-        $Proc.WaitForExit();
-        if ($Proc.ExitCode -ne 0) {
+    $confirm = Read-Host -Prompt "Do you want to install or update National Instruments drivers? (y/n)"
+    if ($confirm -eq "y") {
+        $proc = Start-Process -FilePath "powershell" -Verb RunAs -PassThru -ArgumentList "-Command & '.\ni-setup-windows.ps1'"
+        $handle = $proc.Handle
+        $proc.WaitForExit();
+        if ($proc.ExitCode -ne 0) {
             Write-Log "NI setup failed, re-run $repo-update shortcut to try again." -Level 'ERROR'
         } else {
             Write-Log "NI setup complete."
@@ -497,16 +498,16 @@ while(($Confirm -ne "y") -and ($Confirm -ne "n"))
     }
 }
 
-$Confirm = ""
-while(($Confirm -ne "y") -and ($Confirm -ne "n"))
+$confirm = ""
+while(($confirm -ne "y") -and ($confirm -ne "n"))
 {
-    $Confirm = Read-Host -Prompt "Do you want to install or update $($repo)'s python environment? (y/n)
+    $confirm = Read-Host -Prompt "Do you want to install or update $($repo)'s python environment? (y/n)
     This includes creating or updating the shortcut clark-jupyter"
-    if ($Confirm -ceq "y") {
-        $Proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\py-setup-windows.ps1'"
-        $Handle = $Proc.Handle
-        $Proc.WaitForExit();
-        if ($Proc.ExitCode -ne 0) {
+    if ($confirm -ceq "y") {
+        $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\py-setup-windows.ps1'"
+        $handle = $proc.Handle
+        $proc.WaitForExit();
+        if ($proc.ExitCode -ne 0) {
             Write-Log "Python setup failed, re-run $repo-update shortcut to try again." -Level 'ERROR'
         } else {
             Write-Log "Python setup complete."
