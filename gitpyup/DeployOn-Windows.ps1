@@ -183,6 +183,15 @@ if (!$internet) {
     exit
 }
 
+function Save-ToTemp {
+    param(
+        [string]$Filename,
+        [string]$Content = $null
+    )
+    Return New-Item -Path $Env:TEMP -Name $Filename -ItemType "file" -Force `
+        -Value $Content
+}
+
 # check if admin and prompt to confirm if you are
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $runningAsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -193,7 +202,7 @@ On most devices this means rigth click and select 'run with PowerShell'"
     $confirm = Read-Host -Prompt "Do you want to continue anyway? (y/n)"
     if ($confirm -eq "y") {
         Write-LogOrHost "Proceding as Admin"
-        $return = New-Item -Path $Env:TEMP -Name "$repo-as-admin" -ItemType "file" -Force
+        $return = Save-ToTemp -Filename "$repo-as-admin"
     } else {
         exit
     }
@@ -331,24 +340,9 @@ if (!(Get-SupportStatus)) {
     Write-Log "Support software installed or allready available."
 }
 
-#TODO load <application>.yml file
-applications = @{
-    "clarke" = @{
-        "name" = "clarke"
-        "repo" = ""
-        "app_type" = "python"
-        "app_path" = ""
-        "shortcut_name" = "clarke-jupyter"
-        "shortcut_path" = ""
-        "install_path" = ""
-    }
-}
-
-# make git use deploy key
-$deployKeyPath = Convert-Path "$($repo)_deploy_key"
-$Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
-
-# Adding github.com and github.mmm.com to known_hosts file avoids prompt to add key during 1st install.
+<# The code related to the known_hosts file prevents a confusing prompt the 
+prompt can be confusing because it doesn't show the user's output when they
+respond #>
 
 # create empty known_hosts file if it does not exist
 $knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
@@ -356,7 +350,6 @@ if (!(Test-Path $knownHosts)) {
     Write-Log "creating known_hosts file..."
     New-Item -Path $knownHosts -ItemType File -Force
 }
-
 # update known_hosts file with github.com and github.mmm.com keys
 $knownHostsContent = Get-Content $knownHosts
 $sites = @("github.com", "github.mmm.com")
@@ -368,31 +361,87 @@ foreach ($site in $sites){
 }
 Set-Content -Path $knownHosts -Value $knownHostsContent
 
-if (Test-Path "$($repo)_deploy_key") {
-    # fix permissions on deploy key
-    $Key = "$($repo)_deploy_key"
-    # Reset Users (removes most including UNKNOWN SID)
-    Write-Log (Icacls $Key /T /Q /C /RESET)
-    # Remove Inheritance:
-    Icacls $Key /c /t /Inheritance:d
-    # Set Ownership to Owner:
-        # Key's within $env:UserProfile:
-        Icacls $Key /c /t /Grant ${env:UserName}:F
-        # Key's outside of $env:UserProfile:
-        TakeOwn /F $Key
-        Icacls $Key /c /t /Grant:r ${env:UserName}:F
-    # Remove All Users, except for Owner:
-    Icacls $Key /c /t /Remove:g Administrator "Authenticated Users" BUILTIN\Administrators BUILTIN Everyone System Users
-} else {
-    # check if git remote is reachable
-    git ls-remote
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "No deploy key found, but git remote is reachable."
+<# load <application>.yml file(s) #>
+
+# find all .yml files in the current directory
+$ymlFiles = @(Get-ChildItem -Path "." -Filter "*.yml")
+$yamlFiles = @(Get-ChildItem -Path "." -Filter "*.yaml")
+
+# combine the two arrays
+$allYmlFiles = $ymlFiles + $yamlFiles
+
+# load the yml files
+foreach ($file in $allYmlFiles) {
+    # read the file into a string
+    $fileContent = Get-Content -Path $file.FullName -Raw
+    $appConfig = ConvertFrom-Yaml $fileContent
+
+    # extract any deploy keys to temp location
+    foreach ($key in $appConfig.Keys) {
+        $value = $appConfig[$key]
+        if ($key.ToLower().Contains("deploy_key")) {
+            $deployKeyPath = Save-ToTemp -Filename $key -Content $value
+        }
+
+        # make git use deploy key
+        $deployKeyPath = Convert-Path $deployKeyPath
+        $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
+        
+        # clone the repo
+
+        # remove temp deploy key
+        Remove-Item -Path $deployKeyPath
+
+        # remove the GIT_SSH_COMMAND environment variable
+        $Env:GIT_SSH_COMMAND = $null
+    }
+
+    
+
+}
+# applications = @{
+#     "clarke" = @{
+#         "name" = "clarke"
+#         "repo" = ""
+#         "app_type" = "python"
+#         "app_path" = ""
+#         "shortcut_name" = "clarke-jupyter"
+#         "shortcut_path" = ""
+#         "install_path" = ""
+#     }
+# }
+
+
+# functionalize the following code so it can be called for gitpyup and each application
+function Set-DeployKeyPermissions {
+    param(
+        [string]$Key
+    )
+    
+    if (Test-Path $Key) {
+        # Reset Users (removes most including UNKNOWN SID)
+        Write-Log (Icacls $Key /T /Q /C /RESET)
+        # Remove Inheritance:
+        Icacls $Key /c /t /Inheritance:d
+        # Set Ownership to Owner:
+            # Key's within $env:UserProfile:
+            Icacls $Key /c /t /Grant ${env:UserName}:F
+            # Key's outside of $env:UserProfile:
+            TakeOwn /F $Key
+            Icacls $Key /c /t /Grant:r ${env:UserName}:F
+        # Remove All Users, except for Owner:
+        Icacls $Key /c /t /Remove:g Administrator "Authenticated Users" BUILTIN\Administrators BUILTIN Everyone System Users
     } else {
-        Write-Log "Missing $($repo)_deploy_key file. Place it in the same folder as this script. 
-        It can be downloaded from Project Edith->Documents->Technical->Software"
-        Read-Host -Prompt "Press enter key to exit" | Out-Null
-        exit
+        # check if git remote is reachable
+        git ls-remote
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "No deploy key found, but git remote is reachable."
+        } else {
+            Write-Log "Missing $($repo)_deploy_key file. Place it in the same folder as this script. 
+            It can be downloaded from Project Edith->Documents->Technical->Software"
+            Read-Host -Prompt "Press enter key to exit" | Out-Null
+            exit
+        }
     }
 }
 
