@@ -13,19 +13,19 @@ A set of PowerShell scripts to automate deployment of python applications to non
 
 ## features
 ### Features for everyone
-Automated update via shortcut
-Fixes “SSL certificate verify failed” for conda and pip
+* Update via start menu shortcut
+* Fixes “SSL certificate verify failed” for conda and pip
 
 ### Features for end-users
-Simple: download 3 files, run 1 with admin privileges 
-Start menu shortcuts
-Multi-user installation option
-Don’t need github access
-Use for multiple apps (each gets own conda environment)
+* Simple: download 3 files, run 1 with admin privileges 
+* Start menu shortcuts
+* Multi-user installation option
+* Don’t need github access
+* Use for multiple apps (each gets own conda environment)
 
 ### Features for python app developers
-No compiling or bundling
-Optionally install National Instruments drivers
+* No compiling or bundling
+* Optionally install National Instruments drivers
 
 ## Developer Usage
 
