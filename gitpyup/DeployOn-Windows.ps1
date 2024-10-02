@@ -10,6 +10,11 @@ $scriptVersion = "v1"
 $repo = "gitpyup"
 $Env:REPO = $repo
 
+# Test working directory and move to the script directory if needed
+if (Test-Path "gitpyup") {
+    Set-Location "gitpyup"
+}
+
 # shortcut parent depends on installation type
 $env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$repo"
 $env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$repo"
@@ -28,6 +33,7 @@ $datetime   = Get-Date -f 'yyyyMMddHHmmss'
 $filename   = "Log-${username}-${hostname}-${datetime}.txt"
 $logPath    = Join-Path -Path $sharepath -ChildPath $filename
 
+# script to create start menu shortcuts
 $shortcutScript = {
     param(
         [array]$toRemove,
@@ -221,6 +227,7 @@ if ($installedAll) {
     $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
 }
 
+# TODO how does one install a second app?
 # if installed, make sure running script from the installed location
 $updateShortcutPath = "$shortcutParent\$repo-update.lnk"
 $shortcutExists = Test-Path $updateShortcutPath
@@ -370,49 +377,6 @@ $yamlFiles = @(Get-ChildItem -Path "." -Filter "*.yaml")
 # combine the two arrays
 $allYmlFiles = $ymlFiles + $yamlFiles
 
-# load the yml files
-foreach ($file in $allYmlFiles) {
-    # read the file into a string
-    $fileContent = Get-Content -Path $file.FullName -Raw
-    $appConfig = ConvertFrom-Yaml $fileContent
-
-    # extract any deploy keys to temp location
-    foreach ($key in $appConfig.Keys) {
-        $value = $appConfig[$key]
-        if ($key.ToLower().Contains("deploy_key")) {
-            $deployKeyPath = Save-ToTemp -Filename $key -Content $value
-        }
-
-        # make git use deploy key
-        $deployKeyPath = Convert-Path $deployKeyPath
-        $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
-        
-        # clone the repo
-
-        # remove temp deploy key
-        Remove-Item -Path $deployKeyPath
-
-        # remove the GIT_SSH_COMMAND environment variable
-        $Env:GIT_SSH_COMMAND = $null
-    }
-
-    
-
-}
-# applications = @{
-#     "clarke" = @{
-#         "name" = "clarke"
-#         "repo" = ""
-#         "app_type" = "python"
-#         "app_path" = ""
-#         "shortcut_name" = "clarke-jupyter"
-#         "shortcut_path" = ""
-#         "install_path" = ""
-#     }
-# }
-
-
-# functionalize the following code so it can be called for gitpyup and each application
 function Set-DeployKeyPermissions {
     param(
         [string]$Key
@@ -445,88 +409,144 @@ function Set-DeployKeyPermissions {
     }
 }
 
-# check if in a git repo
-if (git rev-parse --is-inside-work-tree) {
-    Write-Log "in a git repo, pulling"
-    git pull
-# elseif in repo scripts directory but not a git repo
-} elseif ((Get-Item ".").Parent.Name -ceq $repo) {
-    # move to repo root if in scripts directory
-    Set-Location "../."
-    Write-Log "converting to git repo"    
-    git init
-    git remote add origin git@github.com:3M-Cloud/$repo.git
-    git fetch
-    git reset origin/main  # Required when the versioned files existed in path before "git init" of this repo.
-    git checkout -t origin/main
-    Set-Location "scripts"
-} else {
-    # Install for all users or current user
-    $confirm = ""
-    while(($confirm -ne "y") -and ($confirm -ne "n"))
-    {
-        $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
-    }
-    if ($confirm -eq "y") {
-        # all users
-        Set-Location $env:ProgramData
-        $installType = "AllUsers"
-        $installPath = "$env:ProgramData\$repo"
-        $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_ALL
-    } else {
-        # current user
-        Set-Location $env:APPDATA
-        $installType = "SingleUser"
-        $installPath = "$env:APPDATA\$repo"
-        $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
-    }
-    Write-Log "cloning $repo repo in appdata directory..."
-    git clone git@github.com:3M-Cloud/$repo.git
-    Set-Location $installPath\scripts
-    if ($UseDev) {
-        git checkout dev
+# load the yml files
+foreach ($file in $allYmlFiles) {
+    # read the file into a string
+    $fileContent = Get-Content -Path $file.FullName -Raw
+    $appConfig = ConvertFrom-Yaml $fileContent
+
+    # extract any deploy keys to temp location
+    foreach ($key in $appConfig.Keys) {
+        $value = $appConfig[$key]
+        if ($key.ToLower().Contains("deploy_key")) {
+            $deployKeyPath = Save-ToTemp -Filename $key -Content $value
+        }
+
+        # make git use deploy key
+        $deployKeyPath = Convert-Path $deployKeyPath
+        $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
+        Set-DeployKeyPermissions -Key $deployKeyPath
+        
+        # clone the repo
+
+        # remove temp deploy key
+        Remove-Item -Path $deployKeyPath
+
+        # remove the GIT_SSH_COMMAND environment variable
+        $Env:GIT_SSH_COMMAND = $null
     }
 
-    Copy-Item $deployKeyPath .
-    Copy-Item $utilityFunctionsPath .
-    Write-Log "The deploy key and script have been copied to the appdata directory.
-        You may delete your downloaded copy.
-    "
     
-    # shortcut creation
-    $toAdd = @(
-        @{ "shortcut_path" = "$shortcutParent\$repo-update.lnk";
-           "script_name" = "$repo-deploy-windows.ps1";
-           "target_path" = "powershell.exe";
-           "working_directory" = "."},
-        @{ "shortcut_path" = "$shortcutParent\$repo-uninstall.lnk";
-           "script_name" = "$repo-uninstall.ps1";
-           "target_path" = "powershell.exe";
-           "working_directory" = "."}
-    )
-    $shortcutArgs = $toRemove, $toAdd
-    $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
 
-    if ($installType -eq "AllUsers") {
-        Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
-            "-EncodedCommand $encodedShortcutScript",
-            "-EncodedArguments $encodedShortcutArgs"
-        )
+}
+# applications = @{
+#     "clarke" = @{
+#         "name" = "clarke"
+#         "repo" = ""
+#         "app_type" = "python"
+#         "app_path" = ""
+#         "shortcut_name" = "clarke-jupyter"
+#         "shortcut_path" = ""
+#         "install_path" = ""
+#     }
+# }
+
+
+# update or clone the repo
+function Update-LocalRepo {
+    params(
+        [string]$Repo,
+        [string]$InstallPath,
+        [string]$ShortcutParent
+    )
+
+    Write-Log "Updating or cloning $Repo repo..."
+
+    # check if in the git repo you want to update or clone
+    # check if the repo is in any parent directory
+
+    
+    for ($i = 0; $i -lt 5; $i++) {
+        $parentDir = Split-Path -Path "." -Parent
+        $relativeRepo = Join-Path $parentDir $Repo
+        $repoInParent = Test-Path relativeRepo
+        if ($repoInParent) {
+            break
+        }
+    }
+    $relativeRepo = Join-Path $parentDir $Repo
+    $repoInParent = Test-Path relativeRepo
+    if ((git rev-parse --is-inside-work-tree) -and $repoInParent) {
+        Set-Location $relativeRepo
+        Write-Log "in the git repo, pulling"
+        git pull
     } else {
-        # could use $shortcutScript directly but this is more consistent with AllUsers
-        # $shortcutScript not available in py-setup-windows.ps1
-        Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
-            "-EncodedCommand $encodedShortcutScript",
-            "-EncodedArguments $encodedShortcutArgs"
+        # Install for all users or current user
+        $confirm = ""
+        while(($confirm -ne "y") -and ($confirm -ne "n"))
+        {
+            $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
+        }
+        if ($confirm -eq "y") {
+            # all users
+            Set-Location $env:ProgramData
+            $installType = "AllUsers"
+            $installPath = "$env:ProgramData\$repo"
+            $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_ALL
+        } else {
+            # current user
+            Set-Location $env:APPDATA
+            $installType = "SingleUser"
+            $installPath = "$env:APPDATA\$repo"
+            $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
+        }
+        Write-Log "cloning $repo repo in appdata directory..."
+        git clone git@github.com:3M-Cloud/$repo.git
+        Set-Location $installPath\scripts
+        if ($UseDev) {
+            git checkout dev
+        }
+
+        Copy-Item $deployKeyPath .
+        Copy-Item $utilityFunctionsPath .
+        Write-Log "The deploy key and script have been copied to the appdata directory.
+            You may delete your downloaded copy.
+        "
+        
+        # shortcut creation
+        $toAdd = @(
+            @{ "shortcut_path" = "$shortcutParent\$repo-update.lnk";
+            "script_name" = "$repo-deploy-windows.ps1";
+            "target_path" = "powershell.exe";
+            "working_directory" = "."},
+            @{ "shortcut_path" = "$shortcutParent\$repo-uninstall.lnk";
+            "script_name" = "$repo-uninstall.ps1";
+            "target_path" = "powershell.exe";
+            "working_directory" = "."}
         )
+        $shortcutArgs = $toRemove, $toAdd
+        $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
+
+        if ($installType -eq "AllUsers") {
+            Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
+                "-EncodedCommand $encodedShortcutScript",
+                "-EncodedArguments $encodedShortcutArgs"
+            )
+        } else {
+            # could use $shortcutScript directly but this is more consistent with AllUsers
+            # $shortcutScript not available in py-setup-windows.ps1
+            Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
+                "-EncodedCommand $encodedShortcutScript",
+                "-EncodedArguments $encodedShortcutArgs"
+            )
+        }
+    }
+
+    # set permissions on the repo directory
+    if ($installType -eq "AllUsers") {
+        icacls $installPath /grant:r "Users:(OI)(CI)F" /T
     }
 }
-
-# set permissions on the notebooks directory
-if ($installType -eq "AllUsers") {
-    $notebooksPath = "$installPath\notebooks"
-    icacls $notebooksPath /grant:r "Users:(OI)(CI)F" /T
-} 
 
 $env:GITPYUP_SHORTCUT_PARENT = $shortcutParent
 $env:GITPYUP_INSTALL_PARENT = Split-Path -Path $installPath -Parent
