@@ -2,9 +2,9 @@
 A set of PowerShell scripts to automate deployment of python applications to non-coders.
 
 # status
-10/2 - not ready for use yet but looking for someone to try an app deployment in the next week or so
-9/27 - Setup-NationalInstruments.ps1 ready for stand alone use
-9/25 - porting from [clarke](https://github.com/3M-Cloud/clarke/tree/main/scripts) begins
+* 10/2 - not ready for use yet but looking for someone to try an app deployment in the next week or so
+* 9/27 - Setup-NationalInstruments.ps1 ready for stand alone use
+* 9/25 - porting from [clarke](https://github.com/3M-Cloud/clarke/tree/main/scripts) begins
 
 ## End user usage
 1. Download 3 files, *.bat, *.yml, *.ps1 All files must be in the same folder and not in a zip.
