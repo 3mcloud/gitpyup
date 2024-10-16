@@ -1,0 +1,6 @@
+- name: gitpyup-update
+  target: powershell.exe
+  script: Deploy-gitpyup.ps1
+- name: gitpyup-uninstall
+  target: powershell.exe
+  script: Uninstall-gitpyup.ps1

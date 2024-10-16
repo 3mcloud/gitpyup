@@ -66,17 +66,19 @@ $shortcutScript = {
         $shortcutPath = $item['shortcut_path']
         Write-Log "Creating or updating start menu shortcut '$shortcutPath'"
         $shortcut = $shell.CreateShortcut($shortcutPath)
+        $directory = Convert-Path $item['working_directory']
         $shortcut.WorkingDirectory = Convert-Path $item['working_directory']
         $shortcut.TargetPath = $item['target_path']
-        if ($shortcut.TargetPath | Select-String -Pattern "powershell") {
-            $scriptPath = Convert-Path $item['script_name']
-            $shortcut.Arguments = "-File $scriptPath"
+        if ($item.ContainsKey('script_name')) {
+            if ($item['script_name'] -gt 0) {
+                # find the script path in the shortcut's working directory
+                $scriptPath = Get-ChildItem -Path $directory -Filter $item['script_name'] -Recurse
+                # $scriptPath = Convert-Path $item['script_name']
+                $shortcut.Arguments = "-File $scriptPath"
+            }
         }
         $shortcut.Save()
     }
-    
-    # Write-Log "shortcut path is $updateShortcutPath"
-    Write-Log "When needed use start menu shortcut '$repo-update' to update this application."
 
     # TODO comment out for production
     # Read-Host -Prompt "Press enter key to close this window" | Out-Null
@@ -216,31 +218,45 @@ On most devices this means rigth click and select 'run with PowerShell'"
 
 # determine install type
 $installedAll = Test-Path "$env:ProgramData\$repo"
+$installedUser = Test-Path "$env:APPDATA\$repo"
 if ($installedAll) {
-    $installType = "AllUsers"
-    $installPath = "$env:ProgramData\$repo"
-    $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_ALL
-} else {
+    $install = @{
+        'type' = "AllUsers"
+        'path' = "$env:ProgramData\$repo"
+        'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
+    }
+} elseif ($installedUser) {
     # single user install
-    $installType = "SingleUser"
-    $installPath = "$env:APPDATA\$repo"
-    $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
+    $install = @{
+        'type' = "SingleUser"
+        'path' = "$env:APPDATA\$repo"
+        'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
+    }
+} else {
+    $install = @{
+        'type' = "None"
+        'path' = ""
+        'shortcutParent' = ""
+    }
 }
 
 # TODO how does one install a second app?
 # if installed, make sure running script from the installed location
-$updateShortcutPath = "$shortcutParent\$repo-update.lnk"
-$shortcutExists = Test-Path $updateShortcutPath
-$runFromInstalled = (Get-Location).Path -eq "$installPath\$repo"
-$installed = Test-Path "$installPath\$repo"  # the gitpyup/gitpyup directory
-if ($installed -and $shortcutExists -and !($runFromInstalled)) {
-    Write-LogOrHost "Error: $repo allready installed.
-Must run the startmenu shortcut '$repo-update' to update.
-You should delete this copy of the scripts and the deploy key."
-# TODO, users don't appear to follow the directions of this message, automatically jump to the update shortcut
-    Read-Host -Prompt "Press enter key to exit" | Out-Null
-    # jump to shortcut? 
-    exit
+if ($install.type -ne "None") {
+    $updateShortcutPath = Join-Path $install.shortcutParent "$repo-update.lnk"
+    $shortcutExists = Test-Path $updateShortcutPath
+    $repoSubDir = Join-Path $install.path $repo
+    $runFromInstalled = (Get-Location).Path -eq $repoSubDir
+    $installed = Test-Path $repoSubDir
+    if ($installed -and $shortcutExists -and !($runFromInstalled)) {
+        Write-LogOrHost "Error: $repo allready installed.
+    Must run the startmenu shortcut '$repo-update' to update.
+    You should delete this copy of the scripts and the deploy key."
+    # TODO, users don't appear to follow the directions of this message, automatically jump to the update shortcut
+        Read-Host -Prompt "Press enter key to exit" | Out-Null
+        # jump to shortcut? 
+        exit
+    }
 }
 
 function Get-SupportStatus {
@@ -347,9 +363,9 @@ if (!(Get-SupportStatus)) {
     Write-Log "Support software installed or allready available."
 }
 
-<# The code related to the known_hosts file prevents a confusing prompt the 
-prompt can be confusing because it doesn't show the user's output when they
-respond #>
+<# The code related to the known_hosts file prevents a confusing prompt. The 
+prompt can be confusing because it doesn't show the user's input when user
+types #>
 
 # create empty known_hosts file if it does not exist
 $knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
@@ -409,63 +425,20 @@ function Set-DeployKeyPermissions {
     }
 }
 
-# load the yml files
-foreach ($file in $allYmlFiles) {
-    # read the file into a string
-    $fileContent = Get-Content -Path $file.FullName -Raw
-    $appConfig = ConvertFrom-Yaml $fileContent
-
-    # extract any deploy keys to temp location
-    foreach ($key in $appConfig.Keys) {
-        $value = $appConfig[$key]
-        if ($key.ToLower().Contains("deploy_key")) {
-            $deployKeyPath = Save-ToTemp -Filename $key -Content $value
-        }
-
-        # make git use deploy key
-        $deployKeyPath = Convert-Path $deployKeyPath
-        $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
-        Set-DeployKeyPermissions -Key $deployKeyPath
-        
-        # clone the repo
-
-        # remove temp deploy key
-        Remove-Item -Path $deployKeyPath
-
-        # remove the GIT_SSH_COMMAND environment variable
-        $Env:GIT_SSH_COMMAND = $null
-    }
-
-    
-
-}
-# applications = @{
-#     "clarke" = @{
-#         "name" = "clarke"
-#         "repo" = ""
-#         "app_type" = "python"
-#         "app_path" = ""
-#         "shortcut_name" = "clarke-jupyter"
-#         "shortcut_path" = ""
-#         "install_path" = ""
-#     }
-# }
-
-
 # update or clone the repo
 function Update-LocalRepo {
     params(
         [string]$Repo,
-        [string]$InstallPath,
-        [string]$ShortcutParent
+        [string]$CloneURI,
+        [hashtable]$Install
     )
 
     Write-Log "Updating or cloning $Repo repo..."
 
-    # check if in the git repo you want to update or clone
-    # check if the repo is in any parent directory
-
+    # save initial location
+    $initialLocation = Get-Location
     
+    # check if the repo is in any parent directory
     for ($i = 0; $i -lt 5; $i++) {
         $parentDir = Split-Path -Path "." -Parent
         $relativeRepo = Join-Path $parentDir $Repo
@@ -476,58 +449,65 @@ function Update-LocalRepo {
     }
     $relativeRepo = Join-Path $parentDir $Repo
     $repoInParent = Test-Path relativeRepo
+
+    # check if in the git repo you want to update or clone
     if ((git rev-parse --is-inside-work-tree) -and $repoInParent) {
         Set-Location $relativeRepo
         Write-Log "in the git repo, pulling"
         git pull
     } else {
-        # Install for all users or current user
-        $confirm = ""
-        while(($confirm -ne "y") -and ($confirm -ne "n"))
-        {
-            $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
+        # first time cloning
+        if ($Install.type -eq "None") {            
+            # Install for all users or current user
+            $confirm = ""
+            while(($confirm -ne "y") -and ($confirm -ne "n"))
+            {
+                $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
+            }
+            if ($confirm -eq "y") {
+                # all users
+                $Install = @{
+                    'type' = "AllUsers"
+                    'path' = "$env:ProgramData\$Repo"
+                    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
+                }
+            } else {
+                # single user
+                $Install = @{
+                    'type' = "SingleUser"
+                    'path' = "$env:APPDATA\$Repo"
+                    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
+                }
+            }
         }
-        if ($confirm -eq "y") {
-            # all users
-            Set-Location $env:ProgramData
-            $installType = "AllUsers"
-            $installPath = "$env:ProgramData\$repo"
-            $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_ALL
-        } else {
-            # current user
-            Set-Location $env:APPDATA
-            $installType = "SingleUser"
-            $installPath = "$env:APPDATA\$repo"
-            $shortcutParent = $env:GITPYUP_SHORTCUT_PARENT_USER
-        }
-        Write-Log "cloning $repo repo in appdata directory..."
-        git clone git@github.com:3M-Cloud/$repo.git
-        Set-Location $installPath\scripts
+
+        $parentPath = Split-Path -Path $Install.path -Parent
+        $installPath = Join-Path $parentPath $Repo
+
+        Set-Location $parentPath
+        Write-Log "cloning $Repo repo into $installPath ..."
+        git clone $CloneURI
+        Set-Location $installPath
         if ($UseDev) {
             git checkout dev
         }
-
-        Copy-Item $deployKeyPath .
-        Copy-Item $utilityFunctionsPath .
-        Write-Log "The deploy key and script have been copied to the appdata directory.
-            You may delete your downloaded copy.
-        "
         
         # shortcut creation
         $toAdd = @(
-            @{ "shortcut_path" = "$shortcutParent\$repo-update.lnk";
-            "script_name" = "$repo-deploy-windows.ps1";
+            @{ "shortcut_path" = "$($Install.shortcutParent)\$Repo-update.lnk";
+            "script_name" = "$Repo-deploy-windows.ps1";
             "target_path" = "powershell.exe";
             "working_directory" = "."},
-            @{ "shortcut_path" = "$shortcutParent\$repo-uninstall.lnk";
-            "script_name" = "$repo-uninstall.ps1";
+            @{ "shortcut_path" = "$($Install.shortcutParent)\$Repo-uninstall.lnk";
+            "script_name" = "$Repo-uninstall.ps1";
             "target_path" = "powershell.exe";
             "working_directory" = "."}
         )
+        for shortcut in Shortcuts
         $shortcutArgs = $toRemove, $toAdd
         $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
 
-        if ($installType -eq "AllUsers") {
+        if ($Install.type -eq "AllUsers") {
             Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
                 "-EncodedCommand $encodedShortcutScript",
                 "-EncodedArguments $encodedShortcutArgs"
@@ -543,13 +523,87 @@ function Update-LocalRepo {
     }
 
     # set permissions on the repo directory
-    if ($installType -eq "AllUsers") {
-        icacls $installPath /grant:r "Users:(OI)(CI)F" /T
+    if ($Install.type -eq "AllUsers") {
+        icacls $Install.path /grant:r "Users:(OI)(CI)F" /T
     }
+
+    # set location back to initial
+    Set-Location $initialLocation
+
+    Return $Install
 }
 
-$env:GITPYUP_SHORTCUT_PARENT = $shortcutParent
-$env:GITPYUP_INSTALL_PARENT = Split-Path -Path $installPath -Parent
+# load the yml files
+foreach ($file in $allYmlFiles) {
+    # read the file into a string
+    $fileContent = Get-Content -Path $file.FullName -Raw
+    $configRoot = ConvertFrom-Yaml $fileContent
+    $apps = $configRoot.applications
+
+    # extract any deploy keys to temp location
+    foreach ($application in $apps) {
+        $name = $application.name
+        $cloneURI = $application.clone_uri
+        if ($application.ContainsKey("deploy_key")) {
+            if ($null -eq $application.deploy_key) {
+                Write-Log "$name deploy_key is empty"
+            } elseif ($application.deploy_key -notlike "-----BEGIN OPENSSH PRIVATE KEY-----") {
+                Write-Log "$name deploy_key doesn't look like a private key"
+            } else {
+                $deployKeyPath = Save-ToTemp -Filename "$name-deploy_key" -Content $application.deploy_key
+            
+                # make git use deploy key
+                $deployKeyPath = Convert-Path $deployKeyPath # needed?
+                $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
+                Set-DeployKeyPermissions -Key $deployKeyPath
+            }
+        }
+        
+        # clone the repo
+        $install = Update-LocalRepo /
+            -Repo $name /
+            -CloneURI $cloneURI /
+            -Install $install /
+        
+        # process shortcuts
+        
+        $application.shortcuts
+
+        if ($deployKeyPath) {                
+            # remove temp deploy key
+            Remove-Item -Path $deployKeyPath
+
+            # remove the GIT_SSH_COMMAND environment variable
+            $Env:GIT_SSH_COMMAND = $null
+        }
+
+    }
+    Copy-Item $deployKeyPath .
+    Copy-Item $utilityFunctionsPath .
+    Write-Log "The deploy key and script have been copied to the appdata directory.
+        You may delete your downloaded copy.
+    "
+
+}
+
+    # Write-Log "shortcut path is $updateShortcutPath"
+    Write-Log "When needed use start menu shortcut '$repo-update' to update this application."
+# applications = @{
+#     "clarke" = @{
+#         "name" = "clarke"
+#         "repo" = ""
+#         "app_type" = "python"
+#         "app_path" = ""
+#         "shortcut_name" = "clarke-jupyter"
+#         "shortcut_path" = ""
+#         "install_path" = ""
+#     }
+# }
+
+
+
+$env:GITPYUP_SHORTCUT_PARENT = $install.shortcutParent
+$env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
 
 $confirm = ""
 while(($confirm -ne "y") -and ($confirm -ne "n"))
