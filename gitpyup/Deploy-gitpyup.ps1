@@ -9,6 +9,7 @@ param(
 $scriptVersion = "v1"
 $repo = "gitpyup"
 $Env:REPO = $repo
+$ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
 
 # Test working directory and move to the script directory if needed
 if (Test-Path "gitpyup") {
@@ -40,7 +41,7 @@ $shortcutScript = {
         [array]$toAdd
     )
 
-    . "./Utility-Functions.ps1"
+    . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging
 
     # TODO: check if have permissions to remove, if needed get permissions, ideally from existing elevated process
@@ -150,7 +151,7 @@ function Reset-Path {
 
 # save the Start-Logging function to a file
 # define the path to the file
-$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath "Utility-Functions.ps1"
+$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath $ENV:GITPYUPUTILSNAME
 # Write the function to the file
 Set-Content -Force -Path $utilityFunctionsPath -Value $utilityString
 
@@ -248,7 +249,7 @@ $installSupportSoftware = {
         }
     }
 
-    . "./Utility-Functions.ps1"
+    . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging -PrintVersion
     
     function Install-ViaWinget {
@@ -451,7 +452,7 @@ function Update-LocalRepo {
 
     # save initial location
     $initialLocation = Get-Location
-    
+
     # check if the repo is in any parent directory
     for ($i = 0; $i -lt 5; $i++) {
         $parentDir = Split-Path (Get-Location).Path -Parent
@@ -468,9 +469,11 @@ function Update-LocalRepo {
     # check if in the git repo you want to update or clone
     if ((git rev-parse --is-inside-work-tree) -and $repoInParent) {
         Set-Location $someWhereInApp
-        $appPath = git rev-parse --show-toplevel
+        $appPath = git rev-parse --show-toplevel 
         Write-Log "in the git repo, pulling"
-        git pull
+        # $appPath was getting assigned some text from git pull output
+        # Write-Log seems to fix
+        Write-Log (git pull) 
     } else {
         # cloning
         $parentPath = Split-Path -Path $Install.path -Parent
@@ -493,7 +496,7 @@ function Update-LocalRepo {
     # set location back to initial
     Set-Location $initialLocation
 
-    Return $appPath
+    return $appPath
 }
 
 <# New-Shortcuts creates new or updates existing shortcuts. It uses the
@@ -587,14 +590,20 @@ foreach ($file in $allYmlFiles) {
         }
     }
 
-    # set the location to gitpyup repo and copy the application yml
+    # set the location to gitpyup repo
     Set-Location $repoSubDir
-    Copy-Item $file.FullName .
-    Write-Log "The application yml has been copied to $repoSubDir"
+    if (-not (Test-Path $file.Name)){
+        # copy the application yml
+        Copy-Item $file.FullName .
+        Write-Log "The application yml has been copied to $repoSubDir"
+    }
 }
 
 Set-Location $repoSubDir
-Copy-Item $utilityFunctionsPath .
+if (-not (Test-Path $ENV:GITPYUPUTILSNAME)){
+    Copy-Item $utilityFunctionsPath .
+    Write-Log "The application yml has been copied to $repoSubDir"
+}
 
 $shortcutArgs = $toRemove, $toAdd
 $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
