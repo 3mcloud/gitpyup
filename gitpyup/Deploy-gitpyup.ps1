@@ -243,6 +243,8 @@ if ($installedAll) {
 # TODO how does one install a second app?
 # if installed, make sure running script from the installed location
 if ($install.type -ne "None") {
+    Write-LogOrHost "Updating $repo"
+    # $newInstall = $false
     $updateShortcutPath = Join-Path $install.shortcutParent "$repo-update.lnk"
     $shortcutExists = Test-Path $updateShortcutPath
     $repoSubDir = Join-Path $install.path $repo
@@ -257,6 +259,9 @@ if ($install.type -ne "None") {
         # jump to shortcut? 
         exit
     }
+} else {
+    Write-LogOrHost "Installing $repo"
+    # $newInstall = $true
 }
 
 function Get-SupportStatus {
@@ -417,10 +422,7 @@ function Set-DeployKeyPermissions {
         if ($LASTEXITCODE -eq 0) {
             Write-Log "No deploy key found, but git remote is reachable."
         } else {
-            Write-Log "Missing $($repo)_deploy_key file. Place it in the same folder as this script. 
-            It can be downloaded from Project Edith->Documents->Technical->Software"
-            Read-Host -Prompt "Press enter key to exit" | Out-Null
-            exit
+            Write-Log "deploy key not found, Set-DeployKeyPermissions should not have been called."
         }
     }
 }
@@ -482,43 +484,14 @@ function Update-LocalRepo {
         }
 
         $parentPath = Split-Path -Path $Install.path -Parent
-        $installPath = Join-Path $parentPath $Repo
+        $Install.path = Join-Path $parentPath $Repo
 
         Set-Location $parentPath
-        Write-Log "cloning $Repo repo into $installPath ..."
+        Write-Log "cloning $Repo repo into $($Install.path) ..."
         git clone $CloneURI
-        Set-Location $installPath
+        Set-Location $Install.path
         if ($UseDev) {
             git checkout dev
-        }
-        
-        # shortcut creation
-        $toAdd = @(
-            @{ "shortcut_path" = "$($Install.shortcutParent)\$Repo-update.lnk";
-            "script_name" = "$Repo-deploy-windows.ps1";
-            "target_path" = "powershell.exe";
-            "working_directory" = "."},
-            @{ "shortcut_path" = "$($Install.shortcutParent)\$Repo-uninstall.lnk";
-            "script_name" = "$Repo-uninstall.ps1";
-            "target_path" = "powershell.exe";
-            "working_directory" = "."}
-        )
-        for shortcut in Shortcuts
-        $shortcutArgs = $toRemove, $toAdd
-        $encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
-
-        if ($Install.type -eq "AllUsers") {
-            Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
-                "-EncodedCommand $encodedShortcutScript",
-                "-EncodedArguments $encodedShortcutArgs"
-            )
-        } else {
-            # could use $shortcutScript directly but this is more consistent with AllUsers
-            # $shortcutScript not available in py-setup-windows.ps1
-            Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
-                "-EncodedCommand $encodedShortcutScript",
-                "-EncodedArguments $encodedShortcutArgs"
-            )
         }
     }
 
@@ -533,6 +506,35 @@ function Update-LocalRepo {
     Return $Install
 }
 
+<# New-Shortcuts creates new or updates existing shortcuts. It uses the
+shortcuts.yml file found in the repo to determine the shortcuts to create.
+#>
+function Parse-Shortcuts {
+    params(
+        [hashtable]$Install,
+        [array]$Shortcuts
+    )
+
+    parsedShortcuts = @()
+
+    foreach ($shortcut in $Shortcuts) {
+        
+        $parsed = @{
+            "shortcut_path" = "$($Install.shortcutParent)\$($shortcut.name).lnk";
+            "script_name" = $shortcut.script;
+            "target_path" = $shortcut.target;
+            "working_directory" = $Install.path
+        }
+        
+        $parsedShortcuts += $parsed
+    }
+
+    return $parsedShortcuts
+}
+
+# initialize shortcuts to add array
+$toAdd = @()
+
 # load the yml files
 foreach ($file in $allYmlFiles) {
     # read the file into a string
@@ -540,10 +542,12 @@ foreach ($file in $allYmlFiles) {
     $configRoot = ConvertFrom-Yaml $fileContent
     $apps = $configRoot.applications
 
-    # extract any deploy keys to temp location
+    # loop through each application
     foreach ($application in $apps) {
         $name = $application.name
         $cloneURI = $application.clone_uri
+
+        # check for and extract deploy key if it exists
         if ($application.ContainsKey("deploy_key")) {
             if ($null -eq $application.deploy_key) {
                 Write-Log "$name deploy_key is empty"
@@ -565,42 +569,57 @@ foreach ($file in $allYmlFiles) {
             -CloneURI $cloneURI /
             -Install $install /
         
-        # process shortcuts
-        
-        $application.shortcuts
+        # load gitpyup.yml
+        $configYmlPath = Join-Path $Install.path "$repo.yml"
+        if (Test-Path $configYmlPath) {
+            # config file found
+            $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
+            $repoConfig = ConvertFrom-Yaml $repoConfigRaw
 
+            if ($repoConfig.ContainsKey("shortcuts")) {                    
+                $shortcuts = $repoConfig.shortcuts
+
+                # add parsed shortcuts to $toAdd
+                $toAdd += Parse-Shortcuts -Install $install -Shortcuts $shortcuts
+            }
+        }
+
+        # clean up deploy key
         if ($deployKeyPath) {                
             # remove temp deploy key
             Remove-Item -Path $deployKeyPath
-
+            # clear $deployKeyPath
+            $deployKeyPath = $null
             # remove the GIT_SSH_COMMAND environment variable
             $Env:GIT_SSH_COMMAND = $null
         }
-
     }
-    Copy-Item $deployKeyPath .
-    Copy-Item $utilityFunctionsPath .
-    Write-Log "The deploy key and script have been copied to the appdata directory.
-        You may delete your downloaded copy.
-    "
 
+    # set the location to gitpyup repo and copy the application yml
+    Set-Location $repoSubDir
+    Copy-Item $file.FullName .
+    Write-Log "The application yml has been copied to"
 }
 
-    # Write-Log "shortcut path is $updateShortcutPath"
-    Write-Log "When needed use start menu shortcut '$repo-update' to update this application."
-# applications = @{
-#     "clarke" = @{
-#         "name" = "clarke"
-#         "repo" = ""
-#         "app_type" = "python"
-#         "app_path" = ""
-#         "shortcut_name" = "clarke-jupyter"
-#         "shortcut_path" = ""
-#         "install_path" = ""
-#     }
-# }
+Set-Location $repoSubDir
+Copy-Item $utilityFunctionsPath .
 
+$shortcutArgs = $toRemove, $toAdd
+$encodedShortcutArgs = ConvertTo-Base64String -Arguments $shortcutArgs
 
+if ($Install.type -eq "AllUsers") {
+    Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
+        "-EncodedCommand $encodedShortcutScript",
+        "-EncodedArguments $encodedShortcutArgs"
+    )
+} else {
+    # could use $shortcutScript directly but this is more consistent with AllUsers
+    # $shortcutScript not available in py-setup-windows.ps1
+    Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
+        "-EncodedCommand $encodedShortcutScript",
+        "-EncodedArguments $encodedShortcutArgs"
+    )
+}
 
 $env:GITPYUP_SHORTCUT_PARENT = $install.shortcutParent
 $env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
@@ -638,8 +657,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
     }
 }
 
-# $repo-update shortcut
-# & $shortcutScript
+Write-Log "When needed use start menu shortcut '$repo-update' to update this application."
 
 # check and prompt for restart
 if (Test-Path "$Env:TEMP\ni-restart-needed") {
@@ -647,4 +665,4 @@ if (Test-Path "$Env:TEMP\ni-restart-needed") {
     Remove-Item -Force "$Env:TEMP\ni-restart-needed"
 }
 
-Read-Host -Prompt "$repo-deploy-windows is complete, press enter key to close this window" | Out-Null
+Read-Host -Prompt "$repo installation is complete, press enter key to close this window" | Out-Null
