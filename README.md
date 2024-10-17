@@ -2,6 +2,7 @@
 A set of PowerShell scripts to automate deployment of python applications to non-coders.
 
 # status
+* 10/17 - cloning gitpyup and apps works*, Python install works, *deploy key functionality WIP
 * 10/2 - not ready for use yet but looking for someone to try an app deployment in the next week or so
 * 9/27 - Setup-NationalInstruments.ps1 ready for stand alone use
 * 9/25 - porting from [clarke](https://github.com/3M-Cloud/clarke/tree/main/scripts) begins
@@ -34,11 +35,15 @@ A set of PowerShell scripts to automate deployment of python applications to non
 1. generate yourself or request deploy key for gitpyup from Milo
 2. create config file: yourAppName.yml
 
+* in this example plotme is the application
 ```yml
-name: plotme
-clone_uri: https://github.com/3mcloud/plotme.git
-application_deploy_key: "replace with deploy key" # can be removed or left blank if the application repo is world readable
-gitpyup_deploy_key: "replace with deploy key"
+applications:
+  - name: gitpyup
+    clone_uri: git@github.com:3M-Cloud/gitpyup.git
+    deploy_key: "replace with deploy key"
+  - name: plotme
+    clone_uri: git@github.com:3mcloud/plotme.git
+    deploy_key: "replace with deploy key"
 ```
 
 3. upload 3 files somewhere your users can access
