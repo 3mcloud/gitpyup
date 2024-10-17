@@ -1,25 +1,13 @@
 ﻿<#
 This script installs Miniforge3 for the 3M corporate environment.
-It can be run standalone or as part of gitpyup.
+It can be run as part of gitpyup for now.
 #> 
 
 # check if Utility-Functions.ps1 is present
 . "./Utility-Functions.ps1"
 Start-Logging
 
-function Write-LogOrHost {
-    param(
-        [string]$Message
-    )
-    # check if Logging is available
-    if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
-        Write-Log $Message
-    } else {
-        Write-Host $Message
-    }
-}
-
-Write-LogOrHost "Setup-Python v1"
+Write-Log "Setup-Python v1"
 
 # check if admin and warn
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -28,7 +16,7 @@ if ($RunningAsAdmin) {
     if (Test-Path "$Env:TEMP\gitpyup-as-admin") {
         Remove-Item -Force "$Env:TEMP\gitpyup-as-admin"
     } else {
-        Write-LogOrHost "Please run this script as a regular user"
+        Write-Log "Please run this script as a regular user"
         Read-Host -Prompt "Press enter key to exit" | Out-Null
         exit
     }
@@ -51,13 +39,13 @@ if (Test-Path $ExpectedInstallPath) {
 } elseif (Test-Path "$env:UserProfile\Miniforge3") {
     $MiniforgeInstallPath = "$env:UserProfile\Miniforge3"
 } else {
-    Write-LogOrHost "Miniforge install folder not found."
+    Write-Log "Miniforge install folder not found."
 }
 if ($MiniforgeInstallPath) {
-    Write-LogOrHost "Miniforge install path: $MiniforgeInstallPath"
+    Write-Log "Miniforge install path: $MiniforgeInstallPath"
     # check if install location matches expected location
     if ($MiniforgeInstallPath -ne $ExpectedInstallPath) {
-        Write-LogOrHost "Miniforge install path does not match expected path.  Uninstalling..." 
+        Write-Log "Miniforge install path does not match expected path.  Uninstalling..." 
         # allways uninstall with elevation to avoid permission issues
         Start-Process $MiniforgeInstallPath\Uninstall-Miniforge3.exe -Wait -ArgumentList "/S" -Verb RunAs
         # waiting doesn't work, sleep for 20 seconds to allow uninstall to complete
@@ -84,33 +72,33 @@ $MiniforgeInstall = {
 
     # remove Miniforge3 folder if it exists
     if (Test-Path "$MiniforgeInstallPath") {
-        Write-LogOrHost "Miniforge folder found, removing..."
+        Write-Log "Miniforge folder found, removing..."
         Remove-Item -Recurse -Force $MiniforgeInstallPath
-        Write-LogOrHost "...Miniforge folder removed"
+        Write-Log "...Miniforge folder removed"
     }
 
-    Write-LogOrHost "Miniforge not installed, downloading..."
+    Write-Log "Miniforge not installed, downloading..."
     $Link = "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe"
     Invoke-WebRequest $Link -OutFile "$env:UserProfile\Downloads\Miniforge3-Windows-x86_64.exe"
-    Write-LogOrHost "...Miniforge downloaded"
-    Write-LogOrHost "Installing Miniforge..."
+    Write-Log "...Miniforge downloaded"
+    Write-Log "Installing Miniforge..."
     $Installer = "$env:UserProfile\Downloads\Miniforge3-Windows-x86_64.exe"
     $ArgumentList = "/InstallationType=JustMe /RegisterPython=1 /AddToPath=0 /S /D=$MiniforgeInstallPath"
     $Proc = Start-Process $Installer -Wait -ArgumentList $ArgumentList -PassThru
     if ($Proc.ExitCode -ne 0) {
-        Write-LogOrHost "Miniforge installation failed" -Level "ERROR"
+        Write-Log "Miniforge installation failed" -Level "ERROR"
     } else {
-        Write-LogOrHost "...Miniforge installed"
+        Write-Log "...Miniforge installed"
         # 20240905 Miniforge Users need full permissions to run conda
         if ($InstallType -eq "AllUsers") {
-            Write-LogOrHost "Granting permissions to Miniforge folder. This can take over 30 minutes..."
+            Write-Log "Granting permissions to Miniforge folder. This can take over 30 minutes..."
             # inheritance, traversal, quiet
             icacls $MiniforgeInstallPath /grant:r "Users:(OI)(CI)F" /T /Q # full permissions
         }
     }
     $Proc = Start-Process @Conda -ArgumentList init
-    Write-LogOrHost "...Miniforge initialized"
-    Write-LogOrHost "updating conda base env..."
+    Write-Log "...Miniforge initialized"
+    Write-Log "updating conda base env..."
     $Proc = Start-Process @Conda -ArgumentList "update -n base -c conda-forge conda -y"
 }
 
@@ -119,8 +107,8 @@ $CondaVersion = conda --version
 if (!($CondaVersion)) {
     & $MiniforgeInstall $MiniforgeInstallPath $InstallType $Conda
 } else {
-    Write-LogOrHost "Miniforge3 already available"
-    Write-LogOrHost "version: $CondaVersion"
+    Write-Log "Miniforge3 already available"
+    Write-Log "version: $CondaVersion"
 }
 
 $EnvSetupScript = {
@@ -142,7 +130,7 @@ $EnvSetupScript = {
     # this is needed if corporation uses a SSL inspection aka MitM attack
     # this bundle is for our corporation
     $URL = "https://raw.githubusercontent.com/nikolarobottesla/bacon/main/bits.txt"
-    Write-LogOrHost "downloading tls bundle..."
+    Write-Log "downloading tls bundle..."
     Invoke-WebRequest $URL -OutFile $BundlePath
     # are these redundant because setting the .condarc file?
     conda config --set ssl_verify True
@@ -173,7 +161,7 @@ envs_dirs:
     function Test-PipTlsError {
         # Define the command
         $Command = "conda run -n $Repo python -m pip install --dry-run tiny"
-        Write-LogOrHost "Running SSL test command: $Command"
+        Write-Log "Running SSL test command: $Command"
         # Create a temporary file for output
         $TempFile = [System.IO.Path]::GetTempFileName()
         # Execute the command and redirect output to the temporary file
@@ -185,10 +173,10 @@ envs_dirs:
 
         # $TlsTest = conda run -n $Repo python -m pip install --dry-run tiny
         if ($TlsTest | Select-String -Pattern "SSL: CERTIFICATE_VERIFY_FAILED") {
-            Write-LogOrHost "pip SSL error detected"
+            Write-Log "pip SSL error detected"
             return $true
         } else {
-            Write-LogOrHost "pip SSL error not detected"
+            Write-Log "pip SSL error not detected"
             return $false
         }
     }
@@ -198,14 +186,14 @@ envs_dirs:
         # check if pip-system-certs is installed
         if (!(conda run -n $Repo python -m pip list | Select-String -Pattern pip-system-certs)) {
             # patch pip and requests to use system certs
-            Write-LogOrHost "installing pip-system-certs..."
+            Write-Log "installing pip-system-certs..."
             conda install -n $Repo pip-system-certs -y
             # conda run -n $Repo python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip-system-certs
         }
 
         # check if pip still has SSL errors, set pip to use the tls-ca-bundle.pem
         if (Test-PipTlsError) {
-            Write-LogOrHost "pip still has SSL errors, setting pip to use tls-ca-bundle.pem"
+            Write-Log "pip still has SSL errors, setting pip to use tls-ca-bundle.pem"
             conda run -n $Repo python -m pip config set global.cert $BundlePath
         }
     }

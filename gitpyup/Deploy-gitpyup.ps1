@@ -644,8 +644,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
 $confirm = ""
 while(($confirm -ne "y") -and ($confirm -ne "n"))
 {
-    $confirm = Read-Host -Prompt "Do you want to install or update $($repo)'s python environment? (y/n)
-    This includes creating or updating the shortcut clark-jupyter"
+    $confirm = Read-Host -Prompt "Do you want to install or update python? (y/n)"
     if ($confirm -ceq "y") {
         $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Python.ps1'"
         $handle = $proc.Handle
