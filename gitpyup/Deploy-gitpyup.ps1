@@ -216,54 +216,6 @@ On most devices this means rigth click and select 'run with PowerShell'"
     }
 }
 
-# determine install type
-$installedAll = Test-Path "$env:ProgramData\$repo"
-$installedUser = Test-Path "$env:APPDATA\$repo"
-if ($installedAll) {
-    $install = @{
-        'type' = "AllUsers"
-        'path' = "$env:ProgramData\$repo"
-        'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
-    }
-} elseif ($installedUser) {
-    # single user install
-    $install = @{
-        'type' = "SingleUser"
-        'path' = "$env:APPDATA\$repo"
-        'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
-    }
-} else {
-    $install = @{
-        'type' = "None"
-        'path' = ""
-        'shortcutParent' = ""
-    }
-}
-
-# TODO how does one install a second app?
-# if installed, make sure running script from the installed location
-if ($install.type -ne "None") {
-    Write-LogOrHost "Updating $repo"
-    # $newInstall = $false
-    $updateShortcutPath = Join-Path $install.shortcutParent "$repo-update.lnk"
-    $shortcutExists = Test-Path $updateShortcutPath
-    $repoSubDir = Join-Path $install.path $repo
-    $runFromInstalled = (Get-Location).Path -eq $repoSubDir
-    $installed = Test-Path $repoSubDir
-    if ($installed -and $shortcutExists -and !($runFromInstalled)) {
-        Write-LogOrHost "Error: $repo allready installed.
-    Must run the startmenu shortcut '$repo-update' to update.
-    You should delete this copy of the scripts and the deploy key."
-    # TODO, users don't appear to follow the directions of this message, automatically jump to the update shortcut
-        Read-Host -Prompt "Press enter key to exit" | Out-Null
-        # jump to shortcut? 
-        exit
-    }
-} else {
-    Write-LogOrHost "Installing $repo"
-    # $newInstall = $true
-}
-
 function Get-SupportStatus {
     $loggingInstalled = Get-Command Write-Log -ErrorAction SilentlyContinue
     $psYamlInstalled = Get-Command ConvertFrom-Yaml -ErrorAction SilentlyContinue
@@ -368,6 +320,66 @@ if (!(Get-SupportStatus)) {
     Write-Log "Support software installed or allready available."
 }
 
+# install type hash tables
+$installAll = @{
+    'type' = "AllUsers"
+    'path' = "$env:ProgramData\$repo"
+    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
+}
+$installUser = @{
+    'type' = "SingleUser"
+    'path' = "$env:APPDATA\$repo"
+    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
+}
+
+# determine install type
+$installedAll = Test-Path "$env:ProgramData\$repo"
+$installedUser = Test-Path "$env:APPDATA\$repo"
+$installedDev = git rev-parse --is-inside-work-tree # checks if in a git repo
+if ($installedAll) {
+    # all user install detected
+    $install = $installAll
+} elseif ($installedUser) {
+    # single user install detected
+    $install = $installUser
+} elseif ($installedDev) {
+    # dev install detected
+    $install = $installUser
+    $install.path = Split-Path (Get-Location).Path -Parent
+} else {  # not installed
+    # Install for all users or current user
+    $confirm = ""
+    while(($confirm -ne "y") -and ($confirm -ne "n"))
+    {
+        $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
+    }
+    if ($confirm -eq "y") {
+        # all users
+        $install = $installAll
+    } else {
+        # single user
+        $install = $installUser
+    }
+}
+
+# TODO how does one install a second app?
+# if installed, make sure running script from the installed location
+Write-LogOrHost "Updating $repo"
+$updateShortcutPath = Join-Path $install.shortcutParent "$repo-update.lnk"
+$shortcutExists = Test-Path $updateShortcutPath
+$repoSubDir = Join-Path $install.path $repo
+$runFromInstalled = (Get-Location).Path -eq $repoSubDir
+$installed = Test-Path $repoSubDir
+if ($installed -and $shortcutExists -and !($runFromInstalled)) {
+    Write-LogOrHost "Error: $repo allready installed.
+Must run the startmenu shortcut '$repo-update' to update.
+You should delete this copy of the scripts and the deploy key."
+# TODO, users don't appear to follow the directions of this message, automatically jump to the update shortcut
+    Read-Host -Prompt "Press enter key to exit" | Out-Null
+    # jump to shortcut? 
+    exit
+}
+
 <# The code related to the known_hosts file prevents a confusing prompt. The 
 prompt can be confusing because it doesn't show the user's input when user
 types #>
@@ -429,7 +441,7 @@ function Set-DeployKeyPermissions {
 
 # update or clone the repo
 function Update-LocalRepo {
-    params(
+    param(
         [string]$Repo,
         [string]$CloneURI,
         [hashtable]$Install
@@ -442,54 +454,32 @@ function Update-LocalRepo {
     
     # check if the repo is in any parent directory
     for ($i = 0; $i -lt 5; $i++) {
-        $parentDir = Split-Path -Path "." -Parent
-        $relativeRepo = Join-Path $parentDir $Repo
-        $repoInParent = Test-Path relativeRepo
+        $parentDir = Split-Path (Get-Location).Path -Parent
+        $someWhereInApp = Join-Path $parentDir $Repo
+        $repoInParent = Test-Path $someWhereInApp
         if ($repoInParent) {
             break
         }
+        else {
+            Set-Location $parentDir
+        }
     }
-    $relativeRepo = Join-Path $parentDir $Repo
-    $repoInParent = Test-Path relativeRepo
 
     # check if in the git repo you want to update or clone
     if ((git rev-parse --is-inside-work-tree) -and $repoInParent) {
-        Set-Location $relativeRepo
+        Set-Location $someWhereInApp
+        $appPath = git rev-parse --show-toplevel
         Write-Log "in the git repo, pulling"
         git pull
     } else {
-        # first time cloning
-        if ($Install.type -eq "None") {            
-            # Install for all users or current user
-            $confirm = ""
-            while(($confirm -ne "y") -and ($confirm -ne "n"))
-            {
-                $confirm = Read-Host -Prompt "All user install (y/n)? All user install is longer. Only use if necessary. Recommend 'n'"
-            }
-            if ($confirm -eq "y") {
-                # all users
-                $Install = @{
-                    'type' = "AllUsers"
-                    'path' = "$env:ProgramData\$Repo"
-                    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
-                }
-            } else {
-                # single user
-                $Install = @{
-                    'type' = "SingleUser"
-                    'path' = "$env:APPDATA\$Repo"
-                    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
-                }
-            }
-        }
-
+        # cloning
         $parentPath = Split-Path -Path $Install.path -Parent
-        $Install.path = Join-Path $parentPath $Repo
+        $appPath = Join-Path $parentPath $Repo
 
         Set-Location $parentPath
-        Write-Log "cloning $Repo repo into $($Install.path) ..."
+        Write-Log "cloning $Repo repo into $appPath ..."
         git clone $CloneURI
-        Set-Location $Install.path
+        Set-Location $appPath
         if ($UseDev) {
             git checkout dev
         }
@@ -497,25 +487,26 @@ function Update-LocalRepo {
 
     # set permissions on the repo directory
     if ($Install.type -eq "AllUsers") {
-        icacls $Install.path /grant:r "Users:(OI)(CI)F" /T
+        icacls $appPath /grant:r "Users:(OI)(CI)F" /T
     }
 
     # set location back to initial
     Set-Location $initialLocation
 
-    Return $Install
+    Return $appPath
 }
 
 <# New-Shortcuts creates new or updates existing shortcuts. It uses the
 shortcuts.yml file found in the repo to determine the shortcuts to create.
 #>
 function Parse-Shortcuts {
-    params(
+    param(
         [hashtable]$Install,
-        [array]$Shortcuts
+        [array]$Shortcuts,
+        [string]$AppPath
     )
 
-    parsedShortcuts = @()
+    $parsedShortcuts = @()
 
     foreach ($shortcut in $Shortcuts) {
         
@@ -523,7 +514,7 @@ function Parse-Shortcuts {
             "shortcut_path" = "$($Install.shortcutParent)\$($shortcut.name).lnk";
             "script_name" = $shortcut.script;
             "target_path" = $shortcut.target;
-            "working_directory" = $Install.path
+            "working_directory" = $AppPath
         }
         
         $parsedShortcuts += $parsed
@@ -551,7 +542,7 @@ foreach ($file in $allYmlFiles) {
         if ($application.ContainsKey("deploy_key")) {
             if ($null -eq $application.deploy_key) {
                 Write-Log "$name deploy_key is empty"
-            } elseif ($application.deploy_key -notlike "-----BEGIN OPENSSH PRIVATE KEY-----") {
+            } elseif ($application.deploy_key -notlike "-----BEGIN OPENSSH PRIVATE KEY-----*") {
                 Write-Log "$name deploy_key doesn't look like a private key"
             } else {
                 $deployKeyPath = Save-ToTemp -Filename "$name-deploy_key" -Content $application.deploy_key
@@ -564,13 +555,12 @@ foreach ($file in $allYmlFiles) {
         }
         
         # clone the repo
-        $install = Update-LocalRepo /
-            -Repo $name /
-            -CloneURI $cloneURI /
-            -Install $install /
+        $appPath = Update-LocalRepo -Repo $name `
+                                    -CloneURI $cloneURI `
+                                    -Install $install
         
         # load gitpyup.yml
-        $configYmlPath = Join-Path $Install.path "$repo.yml"
+        $configYmlPath = Join-Path $appPath "$repo.yml"
         if (Test-Path $configYmlPath) {
             # config file found
             $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
@@ -580,7 +570,9 @@ foreach ($file in $allYmlFiles) {
                 $shortcuts = $repoConfig.shortcuts
 
                 # add parsed shortcuts to $toAdd
-                $toAdd += Parse-Shortcuts -Install $install -Shortcuts $shortcuts
+                $toAdd += Parse-Shortcuts -Install $install `
+                                          -Shortcuts $shortcuts `
+                                          -AppPath $appPath
             }
         }
 
@@ -598,7 +590,7 @@ foreach ($file in $allYmlFiles) {
     # set the location to gitpyup repo and copy the application yml
     Set-Location $repoSubDir
     Copy-Item $file.FullName .
-    Write-Log "The application yml has been copied to"
+    Write-Log "The application yml has been copied to $repoSubDir"
 }
 
 Set-Location $repoSubDir
