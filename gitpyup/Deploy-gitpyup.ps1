@@ -473,7 +473,7 @@ function Update-LocalRepo {
         Write-Log "in the git repo, pulling"
         # $appPath was getting assigned some text from git pull output
         # Write-Log seems to fix
-        Write-Log (git pull) 
+        Write-Log (git pull)
     } else {
         # cloning
         $parentPath = Split-Path -Path $Install.path -Parent
@@ -630,7 +630,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
 {
     $confirm = Read-Host -Prompt "Do you want to install or update National Instruments drivers? (y/n)"
     if ($confirm -eq "y") {
-        $proc = Start-Process -FilePath "powershell" -Verb RunAs -PassThru -ArgumentList "-Command & '.\ni-setup-windows.ps1'"
+        $proc = Start-Process -FilePath "powershell" -Verb RunAs -PassThru -ArgumentList "-Command & '.\Setup-NationalInstruments.ps1'"
         $handle = $proc.Handle
         $proc.WaitForExit();
         if ($proc.ExitCode -ne 0) {
@@ -647,7 +647,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
     $confirm = Read-Host -Prompt "Do you want to install or update $($repo)'s python environment? (y/n)
     This includes creating or updating the shortcut clark-jupyter"
     if ($confirm -ceq "y") {
-        $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\py-setup-windows.ps1'"
+        $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Python.ps1'"
         $handle = $proc.Handle
         $proc.WaitForExit();
         if ($proc.ExitCode -ne 0) {

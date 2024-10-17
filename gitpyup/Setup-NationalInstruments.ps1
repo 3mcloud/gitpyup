@@ -18,7 +18,7 @@ function Write-LogOrHost {
     }
 }
 
-Write-LogOrHost "Setup-NI v1"
+Write-LogOrHost "Setup-NationalInstruments v1"
 
 $ProgressPreference = 'SilentlyContinue'  # speeds up Invoke-WebRequest
 
