@@ -23,7 +23,7 @@ if exist clarke-deploy-windows.ps1 if exist clarke_deploy_key goto check_Permiss
 :set_Policies_Unblock
     powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force"
     powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"
-    powershell -Command "Unblock-File clarke-deploy-windows.ps1"
+    powershell -Command "Unblock-File Deploy-gitpyup.ps1"
     echo Next step: right click clarke-deploy-windows.ps1 and select 'Run with PowerShell'
 
 :Done
