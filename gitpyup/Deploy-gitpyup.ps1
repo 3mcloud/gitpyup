@@ -4,6 +4,7 @@ param(
     [switch]$DebugMode = $false,
     # -UseDev switch to checkout dev branch instead of main
     [switch]$UseDev = $false,
+    [switch]$AskInstallType = $false,  # not implemented
     [string]$OriginalPath = $null
 )
 
@@ -446,6 +447,9 @@ function Update-LocalRepo {
     # check if the repo is in any parent directory
     for ($i = 0; $i -lt 5; $i++) {
         $parentDir = Split-Path (Get-Location).Path -Parent
+        if (!($parentDir)) {
+            break
+        }
         $someWhereInApp = Join-Path $parentDir $Repo
         $repoInParent = Test-Path $someWhereInApp
         if ($repoInParent) {

@@ -2,6 +2,7 @@
 A set of PowerShell scripts to automate deployment of python applications to non-coders.
 
 # status
+* 10/29 - all features implemented except conda environment creation
 * 10/17 - cloning gitpyup and apps works*, Python install works, *deploy key functionality WIP
 * 10/2 - not ready for use yet but looking for someone to try an app deployment in the next week or so
 * 9/27 - Setup-NationalInstruments.ps1 ready for stand alone use
@@ -14,10 +15,11 @@ A set of PowerShell scripts to automate deployment of python applications to non
 
 ## features
 ### Features for everyone
-* Update via start menu shortcut
+* Installs python optimally for 3M python applications
 * Fixes “SSL certificate verify failed” for conda and pip
 
 ### Features for end-users
+* Update via start menu shortcut
 * Simple: download 3 files, run 1 with admin privileges 
 * Start menu shortcuts
 * Multi-user installation option
@@ -47,7 +49,7 @@ applications:
 ```
 
 3. upload 3 files somewhere your users can access
-    1. DeployOn-*.ps1
+    1. Deploy-gitpyup.ps1
     2. yourAppName.yml
     3. run-elevated-first.bat
 
