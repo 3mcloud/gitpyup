@@ -1,15 +1,18 @@
 param(
+    [string]$YamlFile = "",
     # '-debugMode' switch to enable debug mode
     [switch]$DebugMode = $false,
     # -UseDev switch to checkout dev branch instead of main
-    [switch]$UseDev = $false
+    [switch]$UseDev = $false,
+    [string]$OriginalPath = $null
 )
 
 # variables
 $scriptVersion = "v1"
-$repo = "gitpyup"
-$Env:REPO = $repo
+$gpun = "gitpyup"
+$Env:gitpyupName = $gpun
 $ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
+$appConfigsFile = "appConfigs.yaml"
 
 # Test working directory and move to the script directory if needed
 if (Test-Path "gitpyup") {
@@ -17,13 +20,13 @@ if (Test-Path "gitpyup") {
 }
 
 # shortcut parent depends on installation type
-$env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$repo"
-$env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$repo"
+$env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$gpun"
+$env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$gpun"
 $toRemove = @(
-    "$env:GITPYUP_SHORTCUT_PARENT_USER\$repo-update.lnk",
-    "$env:GITPYUP_SHORTCUT_PARENT_USER\$repo-uninstall.lnk"
-    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$repo-update.lnk",
-    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$repo-uninstall.lnk"
+    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-update.lnk",
+    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-uninstall.lnk"
+    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-update.lnk",
+    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-uninstall.lnk"
 )
 
 # setup logging
@@ -211,7 +214,7 @@ On most devices this means rigth click and select 'run with PowerShell'"
     $confirm = Read-Host -Prompt "Do you want to continue anyway? (y/n)"
     if ($confirm -eq "y") {
         Write-LogOrHost "Proceding as Admin"
-        $return = Save-ToTemp -Filename "$repo-as-admin"
+        $return = Save-ToTemp -Filename "$gpun-as-admin"
     } else {
         exit
     }
@@ -324,29 +327,29 @@ if (!(Get-SupportStatus)) {
 # install type hash tables
 $installAll = @{
     'type' = "AllUsers"
-    'path' = "$env:ProgramData\$repo"
+    'path' = "$env:ProgramData\$gpun"
     'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
 }
 $installUser = @{
     'type' = "SingleUser"
-    'path' = "$env:APPDATA\$repo"
+    'path' = "$env:APPDATA\$gpun"
     'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
 }
 
 # determine install type
-$installedAll = Test-Path "$env:ProgramData\$repo"
-$installedUser = Test-Path "$env:APPDATA\$repo"
+$installedAll = Test-Path $installAll.path
+$installedUser = Test-Path $installUser.path
 $installedDev = git rev-parse --is-inside-work-tree # checks if in a git repo
-if ($installedAll) {
+if ($installedDev) {
+    # dev install detected
+    $install = $installUser
+    $install.path = Split-Path (Get-Location).Path -Parent
+} elseif ($installedAll) {
     # all user install detected
     $install = $installAll
 } elseif ($installedUser) {
     # single user install detected
     $install = $installUser
-} elseif ($installedDev) {
-    # dev install detected
-    $install = $installUser
-    $install.path = Split-Path (Get-Location).Path -Parent
 } else {  # not installed
     # Install for all users or current user
     $confirm = ""
@@ -363,21 +366,17 @@ if ($installedAll) {
     }
 }
 
-# TODO how does one install a second app?
 # if installed, make sure running script from the installed location
-Write-LogOrHost "Updating $repo"
-$updateShortcutPath = Join-Path $install.shortcutParent "$repo-update.lnk"
-$shortcutExists = Test-Path $updateShortcutPath
-$repoSubDir = Join-Path $install.path $repo
-$runFromInstalled = (Get-Location).Path -eq $repoSubDir
-$installed = Test-Path $repoSubDir
-if ($installed -and $shortcutExists -and !($runFromInstalled)) {
-    Write-LogOrHost "Error: $repo allready installed.
-Must run the startmenu shortcut '$repo-update' to update.
-You should delete this copy of the scripts and the deploy key."
-# TODO, users don't appear to follow the directions of this message, automatically jump to the update shortcut
-    Read-Host -Prompt "Press enter key to exit" | Out-Null
-    # jump to shortcut? 
+Write-LogOrHost "Updating $gpun"
+$updateShortcutPath = Join-Path $install.shortcutParent "$gpun-update.lnk"
+$gitpyupScriptDir = Join-Path $install.path $gpun
+$runFromInstalled = (Get-Location).Path -eq $gitpyupScriptDir
+$installed = Test-Path $gitpyupScriptDir
+if ($installed -and !($runFromInstalled)) {
+    Write-Host "Info: $gpun allready installed. Switching to installed location."
+    Write-Host "run using start menu shortcut '$gpun-update' to avoid the above message."
+    Set-Location $gitpyupScriptDir
+    . .\Deploy-gitpyup.ps1 -OriginalPath (Get-Location).Path  # run the installed version
     exit
 }
 
@@ -401,15 +400,6 @@ foreach ($site in $sites){
     $knownHostsContent = $knownHostsContent + $siteKeys
 }
 Set-Content -Path $knownHosts -Value $knownHostsContent
-
-<# load <application>.yml file(s) #>
-
-# find all .yml files in the current directory
-$ymlFiles = @(Get-ChildItem -Path "." -Filter "*.yml")
-$yamlFiles = @(Get-ChildItem -Path "." -Filter "*.yaml")
-
-# combine the two arrays
-$allYmlFiles = $ymlFiles + $yamlFiles
 
 function Set-DeployKeyPermissions {
     param(
@@ -526,11 +516,39 @@ function Parse-Shortcuts {
     return $parsedShortcuts
 }
 
-# initialize shortcuts to add array
-$toAdd = @()
+<# load <application>.yml file(s) #>
+$yamlFiles = @()  # initialize yamlFiles array
+
+# input parameter yaml file
+if ($YamlFile) {
+    if (Test-Path $YamlFile) {
+        $yamlFiles += @(Get-Item -Path $YamlFile)
+    }
+}
+
+if ($OriginalPath) {
+    # find all .yml files in the original path, these take priority
+    $yamlFiles += @(Get-ChildItem -Path $OriginalPath -Filter "*.yaml")
+    $yamlFiles += @(Get-ChildItem -Path $OriginalPath -Filter "*.yml")
+}
+
+# find all .yml files in the current directory
+$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yaml" | Where-Object { $_.Name -ne $appConfigsFile })
+$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yml" | Where-Object { $_.Name -ne $appConfigsFile })
+
+# add the appConfigsFile to the yamlFiles array if it exists
+$appConfigsPath = Join-Path -Path $gitpyupScriptDir -ChildPath $appConfigsFile
+$appConfigsPathObject = Get-Item -Path $appConfigsPath -ErrorAction SilentlyContinue
+if ($appConfigsPathObject.Exists) {
+    $yamlFiles += @($appConfigsPathObject)
+}
+
+$toAdd = @() # initialize shortcuts to add array
+$appNames = @()  # used to check for duplicate
+$appConfigs = @()  # used to save all the configs into one file
 
 # load the yml files
-foreach ($file in $allYmlFiles) {
+foreach ($file in $yamlFiles) {
     # read the file into a string
     $fileContent = Get-Content -Path $file.FullName -Raw
     $configRoot = ConvertFrom-Yaml $fileContent
@@ -539,6 +557,15 @@ foreach ($file in $allYmlFiles) {
     # loop through each application
     foreach ($application in $apps) {
         $name = $application.name
+        
+        if ($appNames -contains $name) {
+            Write-Log "$name is a duplicate, skipping"
+            Write-Log "this is normal if you are updating an application's yaml file"
+            continue
+        }
+        $appNames += @($name)
+        $appConfigs += $application
+
         $cloneURI = $application.clone_uri
 
         # check for and extract deploy key if it exists
@@ -551,9 +578,8 @@ foreach ($file in $allYmlFiles) {
                 $deployKeyPath = Save-ToTemp -Filename "$name-deploy_key" -Content $application.deploy_key
             
                 # make git use deploy key
-                $deployKeyPath = Convert-Path $deployKeyPath # needed?
-                $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
                 Set-DeployKeyPermissions -Key $deployKeyPath
+                $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
             }
         }
         
@@ -563,7 +589,7 @@ foreach ($file in $allYmlFiles) {
                                     -Install $install
         
         # load gitpyup.yml
-        $configYmlPath = Join-Path $appPath "$repo.yml"
+        $configYmlPath = Join-Path $appPath "$gpun.yml"
         if (Test-Path $configYmlPath) {
             # config file found
             $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
@@ -589,20 +615,19 @@ foreach ($file in $allYmlFiles) {
             $Env:GIT_SSH_COMMAND = $null
         }
     }
-
-    # set the location to gitpyup repo
-    Set-Location $repoSubDir
-    if (-not (Test-Path $file.Name)){
-        # copy the application yml
-        Copy-Item $file.FullName .
-        Write-Log "The application yml has been copied to $repoSubDir"
-    }
 }
 
-Set-Location $repoSubDir
+# set the location to gitpyup repo
+Set-Location $gitpyupScriptDir
+if ($appConfigsPathObject.Exists){
+    Remove-Item -Path $appConfigsPath
+}
+$hide = ConvertTo-Yaml $appConfigs -OutFile $appConfigsPath
+Write-Log "The config yml has been written to $gitpyupScriptDir"
+
 if (-not (Test-Path $ENV:GITPYUPUTILSNAME)){
     Copy-Item $utilityFunctionsPath .
-    Write-Log "The application yml has been copied to $repoSubDir"
+    Write-Log "The application yml has been copied to $gitpyupScriptDir"
 }
 
 $shortcutArgs = $toRemove, $toAdd
@@ -634,7 +659,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
         $handle = $proc.Handle
         $proc.WaitForExit();
         if ($proc.ExitCode -ne 0) {
-            Write-Log "NI setup failed, re-run $repo-update shortcut to try again." -Level 'ERROR'
+            Write-Log "NI setup failed, re-run $gpun-update shortcut to try again." -Level 'ERROR'
         } else {
             Write-Log "NI setup complete."
         }
@@ -650,14 +675,14 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
         $handle = $proc.Handle
         $proc.WaitForExit();
         if ($proc.ExitCode -ne 0) {
-            Write-Log "Python setup failed, re-run $repo-update shortcut to try again." -Level 'ERROR'
+            Write-Log "Python setup failed, re-run $gpun-update shortcut to try again." -Level 'ERROR'
         } else {
             Write-Log "Python setup complete."
         }
     }
 }
 
-Write-Log "When needed use start menu shortcut '$repo-update' to update this application."
+Write-Log "When needed use start menu shortcut '$gpun-update' to update this application."
 
 # check and prompt for restart
 if (Test-Path "$Env:TEMP\ni-restart-needed") {
@@ -665,4 +690,4 @@ if (Test-Path "$Env:TEMP\ni-restart-needed") {
     Remove-Item -Force "$Env:TEMP\ni-restart-needed"
 }
 
-Read-Host -Prompt "$repo installation is complete, press enter key to close this window" | Out-Null
+Read-Host -Prompt "$gpun installation is complete, press enter key to close this window" | Out-Null
