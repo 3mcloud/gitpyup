@@ -11,7 +11,6 @@ param(
 # variables
 $scriptVersion = "v1"
 $gpun = "gitpyup"
-$Env:gitpyupName = $gpun
 $ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
 $appConfigsFile = "appConfigs.yaml"
 
@@ -523,7 +522,7 @@ function Parse-Shortcuts {
 <# load <application>.yml file(s) #>
 $yamlFiles = @()  # initialize yamlFiles array
 
-# input parameter yaml file
+# input arg yaml file
 if ($YamlFile) {
     if (Test-Path $YamlFile) {
         $yamlFiles += @(Get-Item -Path $YamlFile)
@@ -568,7 +567,6 @@ foreach ($file in $yamlFiles) {
             continue
         }
         $appNames += @($name)
-        $appConfigs += $application
 
         $cloneURI = $application.clone_uri
 
@@ -592,6 +590,8 @@ foreach ($file in $yamlFiles) {
                                     -CloneURI $cloneURI `
                                     -Install $install
         
+        $application.path = $appPath
+
         # load gitpyup.yml
         $configYmlPath = Join-Path $appPath "$gpun.yml"
         if (Test-Path $configYmlPath) {
@@ -608,6 +608,8 @@ foreach ($file in $yamlFiles) {
                                           -AppPath $appPath
             }
         }
+
+        $appConfigs += $application
 
         # clean up deploy key
         if ($deployKeyPath) {                
@@ -682,6 +684,27 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
             Write-Log "Python setup failed, re-run $gpun-update shortcut to try again." -Level 'ERROR'
         } else {
             Write-Log "Python setup complete."
+        }
+    }
+}
+
+# create or update the python environment for each application
+foreach ($application in $appConfigs) {
+    $name = $application.name
+    $confirm = ""
+    while(($confirm -ne "y") -and ($confirm -ne "n"))
+    {
+        $confirm = Read-Host -Prompt "Do you want to install or update $name? (y/n)"
+        if ($confirm -ceq "y") {
+            $appPath = $application.path
+            $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Application.ps1' -AppPath $appPath -InstallType $install.type"
+            $handle = $proc.Handle
+            $proc.WaitForExit();
+            if ($proc.ExitCode -ne 0) {
+                Write-Log "Python environment setup failed for $name, re-run $gpun-update shortcut to try again." -Level 'ERROR'
+            } else {
+                Write-Log "Python environment setup complete for $name."
+            }
         }
     }
 }
