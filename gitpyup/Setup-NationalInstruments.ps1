@@ -2,8 +2,8 @@
 
 # logging
 # check if Utility-Functions.ps1 is present
-if (Test-Path ".\Utility-Functions.ps1") {
-    . "./Utility-Functions.ps1"
+if (Test-Path "./$ENV:GITPYUPUTILSNAME") {
+    . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging
 }
 function Write-LogOrHost {

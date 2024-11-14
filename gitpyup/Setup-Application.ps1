@@ -9,7 +9,7 @@ param(
 )
 
 # logging
-. "./Utility-Functions.ps1"
+. "./$ENV:GITPYUPUTILSNAME"
 Start-Logging
 
 Write-Log "Setup-Application v1"

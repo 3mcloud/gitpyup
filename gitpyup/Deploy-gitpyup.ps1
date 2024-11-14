@@ -71,14 +71,19 @@ $shortcutScript = {
         Write-Log "Creating or updating start menu shortcut '$shortcutPath'"
         $shortcut = $shell.CreateShortcut($shortcutPath)
         $directory = Convert-Path $item['working_directory']
+        if ($item.ContainsKey('script_directory')) {
+            if ($item['script_directory']) {
+                $directory = Convert-Path $item['script_directory']
+            }
+        }
         $shortcut.WorkingDirectory = Convert-Path $item['working_directory']
         $shortcut.TargetPath = $item['target_path']
         if ($item.ContainsKey('script_name')) {
             if ($item['script_name'] -gt 0) {
                 # find the script path in the shortcut's working directory
                 $scriptPath = Get-ChildItem -Path $directory -Filter $item['script_name'] -Recurse
-                # $scriptPath = Convert-Path $item['script_name']
-                $shortcut.Arguments = "-File $scriptPath"
+                $fullScriptPath = $scriptPath.FullName
+                $shortcut.Arguments = "-File $fullScriptPath"
             }
         }
         $shortcut.Save()
@@ -505,12 +510,31 @@ function Parse-Shortcuts {
     $parsedShortcuts = @()
 
     foreach ($shortcut in $Shortcuts) {
+
+        $workingDirectory = $AppPath
+        if ($shortcut.ContainsKey('working_directory')) {
+            # assumes working_directory is an absolute path
+            if ($shortcut.working_directory -and (Test-Path $shortcut.working_directory)) {
+                $workingDirectory = $shortcut.working_directory
+            }
+        }
+
+        $scriptDirectory = $AppPath
+        if ($shortcut.ContainsKey('script_directory')) {
+            if ($shortcut.script_directory) {
+                $maybeScriptDirectory = Join-Path $AppPath $shortcut.script_directory
+                if (Test-Path $maybeScriptDirectory -PathType Container) {
+                    $scriptDirectory = $maybeScriptDirectory
+                }
+            }
+        }
         
         $parsed = @{
             "shortcut_path" = "$($Install.shortcutParent)\$($shortcut.name).lnk";
             "script_name" = $shortcut.script;
             "target_path" = $shortcut.target;
-            "working_directory" = $AppPath
+            "working_directory" = $workingDirectory;
+            "script_directory" = $scriptDirectory;
         }
         
         $parsedShortcuts += $parsed

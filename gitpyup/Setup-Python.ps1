@@ -4,7 +4,7 @@ It can be run as part of gitpyup for now.
 #> 
 
 # check if Utility-Functions.ps1 is present
-. "./Utility-Functions.ps1"
+. "./$ENV:GITPYUPUTILSNAME"
 Start-Logging
 
 Write-Log "Setup-Python v1"
@@ -67,7 +67,7 @@ $MiniforgeInstall = {
         [hashtable]$Conda
     )
 
-    . "./Utility-Functions.ps1"
+    . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging
 
     # remove Miniforge3 folder if it exists
@@ -117,7 +117,7 @@ $EnvSetupScript = {
     )
 
     # logging
-    . "./Utility-Functions.ps1"
+    . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging
 
     $BundlePath = "$env:ProgramData\tls-ca-bundle.pem"
