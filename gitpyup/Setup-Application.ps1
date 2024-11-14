@@ -4,7 +4,8 @@ This script creates or updates the python applications configured in gitpyup.
 
 param(
     [hashtable]$AppConfig = @{},
-    $InstallType = "SingleUser"
+    [string]$InstallType = "SingleUser",
+    [string]$LocalConfigYaml = "gitpyup.yml"
 )
 
 # logging
@@ -25,6 +26,16 @@ if ($AppConfig.ContainsKey("path")) {
     $appPath = (Get-Location).Path
 }
 
+# load repo config
+$configYmlPath = Join-Path $appPath $LocalConfigYaml
+if (Test-Path $configYmlPath) {
+    # config file found
+    $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
+    $repoConfig = ConvertFrom-Yaml $repoConfigRaw
+} else {
+    $repoConfig = @{}
+}
+
 ### inspect appPath for environment file ###
 
 # list of supported environment files in priority order
@@ -34,30 +45,35 @@ $envFiles = @(
     "setup.py",
     "requirements.txt"
 )
-
-foreach ($envFile in $envFiles) {
-    if (Test-Path (Join-Path $appPath $envFile)) {
+# auto-detect environment file
+foreach ($autoEnvFile in $envFiles) {
+    if (Test-Path (Join-Path $appPath $autoEnvFile)) {
         break
     }
 }
 
+# repo config has priority over auto-detection
+if ($repoConfig.ContainsKey("environment_file")) {
+    $envFile = $repoConfig["environment_file"]
+}
+
+# app config has priority over repo config
 if ($AppConfig.ContainsKey("environment_file")) {
     $envFile = $AppConfig["environment_file"]
 }
 
 # if environment file exists continue if not return error
 $envFilePath = Join-Path $appPath $envFile
-if (Test-Path $envFilePath) {
+$autoEnvFilePath = Join-Path $appPath $autoEnvFile
+if (Test-Path $envFilePath -PathType Leaf) {
     Write-Log "Using environment file $envFilePath"
+} elseif (Test-Path $autoEnvFilePath -PathType Leaf) {
+    $envFilePath = $autoEnvFilePath
+    Write-Log "Automatically found environment file $envFilePath"
 } else {
     Write-Log "No environment file found in $appPath" -Level "ERROR"
     Return 1
 }
-
-# attempt to update conda base environment
-Write-Log "updating conda base env..."
-$response = conda update -n base -c conda-forge conda -y
-Write-Log ($response | Out-String)
 
 # check for existing conda environment, create if not found
 $condaEnvName = $appName
@@ -76,24 +92,65 @@ if ($envFile -ieq "environment.yml" -or $envFile -ieq "environment.yaml") {
     $successString = "Successfully installed "
 } elseif ($envFile -ieq "setup.py") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -e $appPath"
-} elseif ($envFile -eq "requirements.txt") {
+} elseif ($envFile -ieq "requirements.txt") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -r $envFilePath"
 } else {
     Write-Log "Unsupported environment file $envFile" -Level "ERROR"
     Return 1
 }
 
-# install dependencies, keeps trying if install failed
+# install or update python into environment
+if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt") {
+    # get version of python in base environment
+    $response = conda run -n base python --version
+    if ($response -match "Python (\d+\.\d+\.\d+)") {
+        $basePythonVersion = $matches[1]
+        Write-Log "base environment Python version: $basePythonVersion"
+    } else {
+        Write-Log "No Python found in base environment." -Level "ERROR"
+        return 1
+    }
+    # get current version of python in environment, install if not found
+    $response = conda run -n $condaEnvName python --version
+    if ($response -match "Python (\d+\.\d+\.\d+)") {
+        $pythonVersion = $matches[1]
+        Write-Log "$condaEnvName environment Python version: $pythonVersion"
+    } else {
+        Write-Log "It is normal to see 'Python was not found' above this message."
+        Write-Log "Installing Python=$basePythonVersion into $condaEnvName environment..."
+        $response = conda install -n $condaEnvName python=$basePythonVersion -y
+        Write-Log ($response | Out-String)
+    }
+    # if versions don't match update python
+    if ($pythonVersion -ne $basePythonVersion) {
+        Write-Log "Updating to Python=$basePythonVersion in $condaEnvName environment..."
+        $response = conda install -n $condaEnvName python=$basePythonVersion -y
+        Write-Log ($response | Out-String)
+    }
+}
+
+# install dependencies, keeps trying if install fails
 Write-Log "$appName python package installing or updating, duration depends on internet and computer speed."
 $NumAttempts = 1
 $Success = $False
 While (!($Success) -and ($NumAttempts -lt 5)) {
     Write-Log "$appName python package install/update attempt $NumAttempts..."
     $response = Invoke-Expression $installCommand
-    $Success = $response | Select-String -Pattern $successString
-    if ($successString -and !($Success)) {
-        Write-Log ($response | Out-String) -Level "ERROR"
+    $installExitCode = $LASTEXITCODE
+
+    # exit code based test
+    if ($installExitCode -eq 0) {
+        $Success = $True
     } else {
+        $Success = $False
+    }
+
+    # success string based test overrides exit code
+    if ($successString) {
+        $Success = $response | Select-String -Pattern $successString
+    }
+
+    if ($Success) {
         Write-Log ($response | Out-String)
         Write-Log "Successfully installed or updated"
         # environment files have no permissions for 'Users' group
@@ -102,6 +159,8 @@ While (!($Success) -and ($NumAttempts -lt 5)) {
             # inheritance, traversal, quiet
             icacls $EnvPath /grant:r "Users:(OI)(CI)F" /T /Q # full permissions
         }
+    } else {
+        Write-Log ($response | Out-String) -Level "ERROR"
     }
     $NumAttempts++
 }
@@ -109,32 +168,6 @@ While (!($Success) -and ($NumAttempts -lt 5)) {
 # only wait if in debug mode
 if ($Env:GITPYUP_DEPLOY_DEBUG) {
     Read-Host -Prompt "Press enter key to exit" | Out-Null
-}
-
-# remove current shortcut
-$ToRemove = @(
-    "$env:CLARKE_SHORTCUT_PARENT_USER\$Repo-jupyter.lnk",
-    "$env:CLARKE_SHORTCUT_PARENT_ALL\$Repo-jupyter.lnk"
-)
-# shortcut creation
-$ToAdd = @(
-    @{ "shortcut_path" = "$env:CLARKE_SHORTCUT_PARENT\$Repo-jupyter.lnk";
-       "script_name" = Convert-Path "run-jupyter.ps1";
-       "target_path" = "powershell.exe";
-       "working_directory" = "."}
-)
-$ShortcutArgs = $ToRemove, $ToAdd
-$EncodedShortcutArgs = ConvertTo-Base64String -Arguments $ShortcutArgs
-if ($InstallType -eq "AllUsers") {
-    Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
-        "-EncodedCommand $EncodedShortcutScript",
-        "-EncodedArguments $EncodedShortcutArgs"
-    )
-} else {
-    Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
-        "-EncodedCommand $EncodedShortcutScript",
-        "-EncodedArguments $EncodedShortcutArgs"
-    )
 }
 
 Return $LASTEXITCODE

@@ -628,8 +628,8 @@ Set-Location $gitpyupScriptDir
 if ($appConfigsPathObject.Exists){
     Remove-Item -Path $appConfigsPath
 }
-$hide = ConvertTo-Yaml $appConfigs -OutFile $appConfigsPath
-Write-Log "The config yml has been written to $gitpyupScriptDir"
+$response = ConvertTo-Yaml $appConfigs -OutFile $appConfigsPath
+Write-Log "The config yml has been written to $appConfigsPath"
 
 if (-not (Test-Path $ENV:GITPYUPUTILSNAME)){
     Copy-Item $utilityFunctionsPath .
@@ -653,7 +653,6 @@ if ($Install.type -eq "AllUsers") {
     )
 }
 
-$env:GITPYUP_SHORTCUT_PARENT = $install.shortcutParent
 $env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
 
 $confirm = ""
@@ -691,13 +690,16 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
 # create or update the python environment for each application
 foreach ($application in $appConfigs) {
     $name = $application.name
+    # gitpyup is not a python application
+    if ($application.name -eq "gitpyup") {
+        continue
+    }
     $confirm = ""
     while(($confirm -ne "y") -and ($confirm -ne "n"))
     {
-        $confirm = Read-Host -Prompt "Do you want to install or update $name? (y/n)"
+        $confirm = Read-Host -Prompt "Do you want to install or update $name ? (y/n)"
         if ($confirm -ceq "y") {
-            $appPath = $application.path
-            $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Application.ps1' -AppPath $appPath -InstallType $install.type"
+            $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Application.ps1' -AppConfig $application -InstallType $install.type"
             $handle = $proc.Handle
             $proc.WaitForExit();
             if ($proc.ExitCode -ne 0) {

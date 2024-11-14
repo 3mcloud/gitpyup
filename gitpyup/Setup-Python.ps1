@@ -98,8 +98,6 @@ $MiniforgeInstall = {
     }
     $Proc = Start-Process @Conda -ArgumentList init
     Write-Log "...Miniforge initialized"
-    Write-Log "updating conda base env..."
-    $Proc = Start-Process @Conda -ArgumentList "update -n base -c conda-forge conda -y"
 }
 
 # Check if miniforge's conda.bat runs
@@ -197,6 +195,11 @@ envs_dirs:
             conda run -n $Repo python -m pip config set global.cert $BundlePath
         }
     }
+
+    # attempt to update conda base environment
+    Write-Log "updating conda base env..."
+    $response = conda update -n base -c conda-forge conda -y
+    Write-Log ($response | Out-String)
 
     # only wait if in debug mode
     if ($Env:GITPYUP_DEPLOY_DEBUG) {
