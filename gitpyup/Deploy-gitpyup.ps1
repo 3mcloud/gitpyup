@@ -14,6 +14,11 @@ $gpun = "gitpyup"
 $ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
 $appConfigsFile = "appConfigs.yaml"
 
+$defaultGitpyup = @{  # default gitpyup config
+    name= $gpun
+    clone_uri= "https://github.com/3M-Cloud/gitpyup.git"
+}
+
 # Test working directory and move to the script directory if needed
 if (Test-Path "gitpyup") {
     Set-Location "gitpyup"
@@ -23,9 +28,9 @@ if (Test-Path "gitpyup") {
 $env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$gpun"
 $env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$gpun"
 $toRemove = @(
-    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-update.lnk",
+    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-update.lnk"
     "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-uninstall.lnk"
-    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-update.lnk",
+    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-update.lnk"
     "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-uninstall.lnk"
 )
 
@@ -607,7 +612,7 @@ if ($appConfigsPathObject.Exists) {
 
 $toAdd = @() # initialize shortcuts to add array
 $appNames = @()  # used to check for duplicate
-$appConfigs = @()  # used to save all the configs into one file
+$appConfigs = @()  # used to accumulate all the configs
 
 # load the yml files
 foreach ($file in $yamlFiles) {
@@ -627,58 +632,71 @@ foreach ($file in $yamlFiles) {
         }
         $appNames += @($name)
 
-        $cloneURI = $application.clone_uri
-
-        # check for and extract deploy key if it exists
-        if ($application.ContainsKey("deploy_key")) {
-            if ($null -eq $application.deploy_key) {
-                Write-Log "$name deploy_key is empty"
-            } elseif ($application.deploy_key -notlike "-----BEGIN OPENSSH PRIVATE KEY-----*") {
-                Write-Log "$name deploy_key doesn't look like a private key"
-            } else {
-                $deployKeyPath = Save-ToTemp -Filename "$name-deploy_key" -Content $application.deploy_key
-            
-                # make git use deploy key
-                Set-DeployKeyPermissions -Key $deployKeyPath
-                $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
-            }
-        }
-        
-        # clone the repo
-        $appPath = Update-LocalRepo -Repo $name `
-                                    -CloneURI $cloneURI `
-                                    -Install $install
-        
-        $application.path = $appPath
-
-        # load gitpyup.yml
-        $configYmlPath = Join-Path $appPath "$gpun.yml"
-        if (Test-Path $configYmlPath) {
-            # config file found
-            $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
-            $repoConfig = ConvertFrom-Yaml $repoConfigRaw
-
-            if ($repoConfig.ContainsKey("shortcuts")) {                    
-                $shortcuts = $repoConfig.shortcuts
-
-                # add parsed shortcuts to $toAdd
-                $toAdd += Parse-Shortcuts -Install $install `
-                                          -Shortcuts $shortcuts `
-                                          -AppPath $appPath
-            }
-        }
-
         $appConfigs += $application
+    }
+}
 
-        # clean up deploy key
-        if ($deployKeyPath) {                
-            # remove temp deploy key
-            Remove-Item -Path $deployKeyPath
-            # clear $deployKeyPath
-            $deployKeyPath = $null
-            # remove the GIT_SSH_COMMAND environment variable
-            $Env:GIT_SSH_COMMAND = $null
+# if gitpyup is not in the appNames add it to appConfigs
+if (!($appNames -contains $gpun)) {
+    Write-Log "gitpyup not found in yml, using default"
+    $appNames += @($gpun)
+    $appConfigs += $defaultGitpyup
+}
+
+# clone the repos
+# loop through each application
+foreach ($application in $appConfigs) {
+    $name = $application.name
+
+    $cloneURI = $application.clone_uri
+
+    # check for and extract deploy key if it exists
+    if ($application.ContainsKey("deploy_key")) {
+        if ($null -eq $application.deploy_key) {
+            Write-Log "$name deploy_key is empty"
+        } elseif ($application.deploy_key -notlike "-----BEGIN OPENSSH PRIVATE KEY-----*") {
+            Write-Log "$name deploy_key doesn't look like a private key"
+        } else {
+            $deployKeyPath = Save-ToTemp -Filename "$name-deploy_key" -Content $application.deploy_key
+        
+            # make git use deploy key
+            Set-DeployKeyPermissions -Key $deployKeyPath
+            $Env:GIT_SSH_COMMAND = "ssh -i '$deployKeyPath' -o IdentitiesOnly=yes"
         }
+    }
+    
+    # clone the repo
+    $appPath = Update-LocalRepo -Repo $name `
+                                -CloneURI $cloneURI `
+                                -Install $install
+    
+    $application.path = $appPath
+
+    # load gitpyup.yml
+    $configYmlPath = Join-Path $appPath "$gpun.yml"
+    if (Test-Path $configYmlPath) {
+        # config file found
+        $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
+        $repoConfig = ConvertFrom-Yaml $repoConfigRaw
+
+        if ($repoConfig.ContainsKey("shortcuts")) {                    
+            $shortcuts = $repoConfig.shortcuts
+
+            # add parsed shortcuts to $toAdd
+            $toAdd += Parse-Shortcuts -Install $install `
+                                      -Shortcuts $shortcuts `
+                                      -AppPath $appPath
+        }
+    }
+
+    # clean up deploy key
+    if ($deployKeyPath) {                
+        # remove temp deploy key
+        Remove-Item -Path $deployKeyPath
+        # clear $deployKeyPath
+        $deployKeyPath = $null
+        # remove the GIT_SSH_COMMAND environment variable
+        $Env:GIT_SSH_COMMAND = $null
     }
 }
 
@@ -750,7 +768,7 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
 foreach ($application in $appConfigs) {
     $name = $application.name
     # gitpyup is not a python application
-    if ($application.name -eq "gitpyup") {
+    if ($application.name -eq $gpun) {
         continue
     }
     $confirm = ""

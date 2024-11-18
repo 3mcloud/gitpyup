@@ -20,9 +20,11 @@ A set of PowerShell scripts to automate deployment of python applications to non
 * Use for multiple apps (each gets own conda environment)
 
 ### Features for python app developers
+* Updates distributed via git (uses git cli, so not tied to github.com)
+* Use SSH (deploy) keys to access private repos
 * No compiling or bundling
 * Optionally install National Instruments drivers
-* environment file autodetect: priority highest to lowest - environment.yml > setup.py > requirements.txt
+* Environment file autodetect: priority highest to lowest - environment.yml > setup.py > requirements.txt
 
 ## Developer Usage
 
@@ -51,10 +53,10 @@ shortcuts:  # generate shortcuts
 applications:
   - name: gitpyup
     clone_uri: git@github.com:3M-Cloud/gitpyup.git
-    deploy_key: "replace with deploy key"
+    deploy_key: "replace with deploy key if needed"
   - name: plotme
     clone_uri: git@github.com:3mcloud/plotme.git
-    deploy_key: "replace with deploy key"
+    deploy_key: "replace with deploy key if needed"
 ```
 
 5. upload 3 files somewhere your users can access
