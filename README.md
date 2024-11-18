@@ -1,14 +1,7 @@
 # gitpyup
 A set of PowerShell scripts to automate deployment of python applications to non-coders.
 
-# status
-* 10/29 - all features implemented except conda environment creation
-* 10/17 - cloning gitpyup and apps works*, Python install works, *deploy key functionality WIP
-* 10/2 - not ready for use yet but looking for someone to try an app deployment in the next week or so
-* 9/27 - Setup-NationalInstruments.ps1 ready for stand alone use
-* 9/25 - porting from [clarke](https://github.com/3M-Cloud/clarke/tree/main/scripts) begins
-
-## End user usage
+## End user usage (developers keep going)
 1. Download 3 files, *.bat, *.yml, *.ps1 All files must be in the same folder and not in a zip.
 1. Right click run-elevated-firse.bat and click 'Run with Elevated Privileges' or 'Run as Administrator', allow elevation when prompted
 1. Right click *.ps1 and click 'Run with PowerShell', allow  elevation when prompted and follow the prompts
@@ -29,16 +22,32 @@ A set of PowerShell scripts to automate deployment of python applications to non
 ### Features for python app developers
 * No compiling or bundling
 * Optionally install National Instruments drivers
+* environment file autodetect: priority highest to lowest - environment.yml > setup.py > requirements.txt
 
 ## Developer Usage
 
-### Full deployment
+### Deploy Application(s)
 1. generate read-only deploy key for your application repo
-1. generate yourself or request deploy key for gitpyup from Milo
-2. create config file: yourAppName.yml
+2. generate yourself or request deploy key for gitpyup from Milo
+3. (optional) add gitpyup.yml to your application repo(s) to generate shortcuts and or set the environment file
 
-* in this example plotme is the application
 ```yml
+# example contents of optional gitpyup.yml in root of application repo
+environment_file: setup.py  # specify to override autodetect
+shortcuts:  # generate shortcuts
+  - name: myconsolescript
+    command: conda run -n <app name> <console script> # e.g. conda run -n plotme plotme
+    target: powershell.exe  # (optional) default is powershell.exe
+  - name: myscript
+    target: powershell.exe
+    script: myscript.ps1
+```
+
+4. create config file: yourAppName.yml
+
+* In this example plotme is the application.  The gitpyup application is allways included. Application order doesn't matter.
+```yml
+# <your app name>.yml - name is up to you
 applications:
   - name: gitpyup
     clone_uri: git@github.com:3M-Cloud/gitpyup.git
@@ -48,7 +57,7 @@ applications:
     deploy_key: "replace with deploy key"
 ```
 
-3. upload 3 files somewhere your users can access
+5. upload 3 files somewhere your users can access
     1. Deploy-gitpyup.ps1
     2. yourAppName.yml
     3. run-elevated-first.bat

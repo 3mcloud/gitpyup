@@ -61,12 +61,11 @@ $shortcutScript = {
     if (!(Test-Path $shortcutParent)) {
         New-Item -Path $shortcutParent -ItemType "directory" -Force
     }
-
-    # initialize shortcut creation
-    $shell = New-Object -ComObject WScript.Shell
     
     # loop through each shortcut in $toAdd
     foreach ($item in $toAdd) {
+        # initialize shortcut creation
+        $shell = New-Object -ComObject WScript.Shell
         $shortcutPath = $item['shortcut_path']
         Write-Log "Creating or updating start menu shortcut '$shortcutPath'"
         $shortcut = $shell.CreateShortcut($shortcutPath)
@@ -82,9 +81,11 @@ $shortcutScript = {
             if ($item['script_name'] -gt 0) {
                 # find the script path in the shortcut's working directory
                 $scriptPath = Get-ChildItem -Path $directory -Filter $item['script_name'] -Recurse
-                $fullScriptPath = $scriptPath.FullName
-                $shortcut.Arguments = "-File $fullScriptPath"
+                $shortcut.Arguments = "-File $($scriptPath.FullName)"
             }
+        } elseif ($item.ContainsKey('command')) {
+            # apply the command to the shortcut
+            $shortcut.Arguments = "-Command $($item.command)"
         }
         $shortcut.Save()
     }
@@ -511,30 +512,64 @@ function Parse-Shortcuts {
 
     foreach ($shortcut in $Shortcuts) {
 
-        $workingDirectory = $AppPath
-        if ($shortcut.ContainsKey('working_directory')) {
-            # assumes working_directory is an absolute path
-            if ($shortcut.working_directory -and (Test-Path $shortcut.working_directory)) {
-                $workingDirectory = $shortcut.working_directory
+        $workingDirectory = $AppPath  # default shortcut working directory
+        if ($shortcut.ContainsKey('working_directory') -and $shortcut.working_directory) {
+            $wdOverride = $shortcut.working_directory
+            $wdRooted = [System.IO.Path]::IsPathRooted($wdOverride)
+            if (!($wdRooted)) {
+                $wdOverride = Join-Path $AppPath $wdOverride
+            }
+            $wdFolder = Test-Path $wdOverride -PathType Container
+            if ($wdFolder) {
+                $workingDirectory = $wdOverride
+            } else {
+                Write-Log "skipping shortcut '$($shortcut.name)':"  -Level "WARNING"
+                Write-Log "-due to invalid working_directory value '$($shortcut.working_directory)'"  -Level "WARNING"
+                continue
             }
         }
 
-        $scriptDirectory = $AppPath
-        if ($shortcut.ContainsKey('script_directory')) {
-            if ($shortcut.script_directory) {
-                $maybeScriptDirectory = Join-Path $AppPath $shortcut.script_directory
-                if (Test-Path $maybeScriptDirectory -PathType Container) {
-                    $scriptDirectory = $maybeScriptDirectory
-                }
+        $targetPath = "powershell.exe"  # default shortcut target
+        if ($shortcut.ContainsKey('target') -and $shortcut.target) {
+            $workingTarget = Get-Command $shortcut.target -ErrorAction SilentlyContinue
+            if ($workingTarget) {
+                $targetPath = $shortcut.target
+            } else {
+                Write-Log "skipping shortcut '$($shortcut.name)':"  -Level "WARNING"
+                Write-Log "-due to invalid target '$($shortcut.target)'"  -Level "WARNING"
+                continue
+            }
+        }
+
+        $parsed = @{
+            "shortcut_path" = "$($Install.shortcutParent)\$($shortcut.name).lnk";
+            "target_path" = $targetPath;
+            "working_directory" = $workingDirectory;
+        }
+        
+        if ($shortcut.ContainsKey('script')) {
+            if ($shortcut.script) {
+                $parsed.script_name = $shortcut.script
             }
         }
         
-        $parsed = @{
-            "shortcut_path" = "$($Install.shortcutParent)\$($shortcut.name).lnk";
-            "script_name" = $shortcut.script;
-            "target_path" = $shortcut.target;
-            "working_directory" = $workingDirectory;
-            "script_directory" = $scriptDirectory;
+        if ($shortcut.ContainsKey('script_directory')) {
+            if ($shortcut.script_directory) {
+                $scriptDirectory = Join-Path $AppPath $shortcut.script_directory
+                if (Test-Path $scriptDirectory -PathType Container) {
+                    $parsed.script_directory = $scriptDirectory
+                } else {
+                    Write-Log "shortcut '$($shortcut.name)':" -Level "WARNING"
+                    Write-Log "-invalid script_directory value '$($shortcut.script_directory)'" -Level "WARNING"
+                    Write-Log "-using default: $AppPath" -Level "WARNING"
+                }
+            }
+        }
+
+        if ($shortcut.ContainsKey('command')) {
+            if ($shortcut.command) {
+                $parsed.command = $shortcut.command
+            }
         }
         
         $parsedShortcuts += $parsed
