@@ -8,7 +8,7 @@ A set of PowerShell scripts to automate deployment of python applications to non
 
 ## features
 ### Features for everyone
-* Installs python optimally for 3M python applications
+* Installs python optimized for enterprise environments (miniforge-cost,versatility,reproduceability)
 * Fixes “SSL certificate verify failed” for conda and pip
 
 ### Features for end-users
