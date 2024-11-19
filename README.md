@@ -3,10 +3,15 @@ A set of PowerShell scripts to automate deployment of python applications to non
 
 ## End user usage (developers keep going)
 1. Download 3 files, *.bat, *.yml, *.ps1 All files must be in the same folder and not in a zip.
-1. Right click run-elevated-firse.bat and click 'Run with Elevated Privileges' or 'Run as Administrator', allow elevation when prompted
-1. Right click *.ps1 and click 'Run with PowerShell', allow  elevation when prompted and follow the prompts
+2. Right click run-elevated-firse.bat and click 'Run with Elevated Privileges' or 'Run as Administrator', allow elevation when prompted
+3. Right click *.ps1 and click 'Run with PowerShell', allow  elevation when prompted and follow the prompts
 
-## features
+## Requirements
+* Operating system: Windows 10 or 11
+* Internet connection during installation/update
+* Disk used: varies by application but minimum ~2GB
+
+## Features
 ### Features for everyone
 * Installs python optimized for enterprise environments (miniforge-cost,versatility,reproduceability)
 * Fixes “SSL certificate verify failed” for conda and pip
