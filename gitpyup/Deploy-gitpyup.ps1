@@ -12,7 +12,7 @@ param(
 $scriptVersion = "v1"
 $gpun = "gitpyup"
 $ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
-$appConfigsFile = "appConfigs.yaml"
+$installConfigFile = "installConfig.yaml"
 
 $defaultGitpyup = @{  # default gitpyup config
     name= $gpun
@@ -332,7 +332,7 @@ if (!(Get-SupportStatus)) {
     Read-Host -Prompt "Press enter key to exit" | Out-Null
     exit
 } else {
-    Write-Log "Support software installed or allready available."
+    Write-Log "Support software found."
 }
 
 # install type hash tables
@@ -378,7 +378,7 @@ if ($installedDev) {
 }
 
 # if installed, make sure running script from the installed location
-Write-LogOrHost "Updating $gpun"
+Write-LogOrHost "Checking for existing installation..."
 $updateShortcutPath = Join-Path $install.shortcutParent "$gpun-update.lnk"
 $gitpyupScriptDir = Join-Path $install.path $gpun
 $runFromInstalled = (Get-Location).Path -eq $gitpyupScriptDir
@@ -389,6 +389,11 @@ if ($installed -and !($runFromInstalled)) {
     Set-Location $gitpyupScriptDir
     . .\Deploy-gitpyup.ps1 -OriginalPath (Get-Location).Path  # run the installed version
     exit
+} elseif ($installed -and $runFromInstalled) {
+    Write-LogOrHost "Existing installation found."
+}
+else {
+    Write-LogOrHost "No existing installation found."
 }
 
 <# The code related to the known_hosts file prevents a confusing prompt. The 
@@ -491,6 +496,9 @@ function Update-LocalRepo {
             git checkout dev
         }
     }
+
+    # convert to full path, fix delimeters 
+    $appPath = Convert-Path $appPath 
 
     # set permissions on the repo directory
     if ($Install.type -eq "AllUsers") {
@@ -600,14 +608,14 @@ if ($OriginalPath) {
 }
 
 # find all .yml files in the current directory
-$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yaml" | Where-Object { $_.Name -ne $appConfigsFile })
-$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yml" | Where-Object { $_.Name -ne $appConfigsFile })
+$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yaml" | Where-Object { $_.Name -ne $installConfigFile })
+$yamlFiles += @(Get-ChildItem -Path "." -Filter "*.yml" | Where-Object { $_.Name -ne $installConfigFile })
 
-# add the appConfigsFile to the yamlFiles array if it exists
-$appConfigsPath = Join-Path -Path $gitpyupScriptDir -ChildPath $appConfigsFile
-$appConfigsPathObject = Get-Item -Path $appConfigsPath -ErrorAction SilentlyContinue
-if ($appConfigsPathObject.Exists) {
-    $yamlFiles += @($appConfigsPathObject)
+# add the installConfigFile to the yamlFiles array if it exists
+$installConfigPath = Join-Path -Path $gitpyupScriptDir -ChildPath $installConfigFile
+$installConfigPathObject = Get-Item -Path $installConfigPath -ErrorAction SilentlyContinue
+if ($installConfigPathObject.Exists) {
+    $yamlFiles += @($installConfigPathObject)
 }
 
 $toAdd = @() # initialize shortcuts to add array
@@ -625,12 +633,13 @@ foreach ($file in $yamlFiles) {
     foreach ($application in $apps) {
         $name = $application.name
         
+        # check if the application is already in the appNames list
         if ($appNames -contains $name) {
             Write-Log "$name is a duplicate, skipping"
-            Write-Log "this is normal if you are updating an application's yaml file"
+            Write-Log "this is normal if you are updating"
             continue
         }
-        $appNames += @($name)
+        $appNames += $name
 
         $appConfigs += $application
     }
@@ -639,7 +648,7 @@ foreach ($file in $yamlFiles) {
 # if gitpyup is not in the appNames add it to appConfigs
 if (!($appNames -contains $gpun)) {
     Write-Log "gitpyup not found in yml, using default"
-    $appNames += @($gpun)
+    $appNames += $gpun
     $appConfigs += $defaultGitpyup
 }
 
@@ -702,11 +711,20 @@ foreach ($application in $appConfigs) {
 
 # set the location to gitpyup repo
 Set-Location $gitpyupScriptDir
-if ($appConfigsPathObject.Exists){
-    Remove-Item -Path $appConfigsPath
+if ($installConfigPathObject.Exists){
+    Remove-Item -Path $installConfigPath
 }
-$response = ConvertTo-Yaml $appConfigs -OutFile $appConfigsPath
-Write-Log "The config yml has been written to $appConfigsPath"
+
+# build the installConfig from appConfigs and shortcuts
+$installConfig = @{
+    "applications" = $appConfigs
+    "created_shortcuts" = $toAdd
+    "install" = $install
+}
+
+# save the config to a file
+$response = ConvertTo-Yaml $installConfig -OutFile $installConfigPath
+Write-Log "The config yml has been written to $installConfigPath"
 
 if (-not (Test-Path $ENV:GITPYUPUTILSNAME)){
     Copy-Item $utilityFunctionsPath .

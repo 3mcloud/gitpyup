@@ -21,6 +21,7 @@ if exist Deploy-gitpyup.ps1 goto check_Permissions
     )
     
 :set_Policies_Unblock
+    echo Attempting to set execution policies and unblock Deploy-gitpyup.ps1...
     powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force"
     powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"
     powershell -Command "Unblock-File Deploy-gitpyup.ps1"
