@@ -42,6 +42,7 @@ if (Test-Path $configYmlPath) {
 $envFiles = @(
     "environment.yml",
     "environment.yaml",
+    "pyproject.toml",
     "setup.py",
     "requirements.txt"
 )
@@ -90,7 +91,7 @@ if ($condaEnvList | Select-String -Pattern $condaEnvName) {
 if ($envFile -ieq "environment.yml" -or $envFile -ieq "environment.yaml") {
     $installCommand = "conda env update -n $condaEnvName --file $envFilePath --prune"
     $successString = "Successfully installed "
-} elseif ($envFile -ieq "setup.py") {
+} elseif ($envFile -ieq "setup.py" -or $envFile -ieq "pyproject.toml") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -e $appPath"
 } elseif ($envFile -ieq "requirements.txt") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -r $envFilePath"

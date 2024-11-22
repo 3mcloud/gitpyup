@@ -1,5 +1,10 @@
 # gitpyup
-A set of PowerShell scripts to automate deployment of python applications to non-coders.
+A set of PowerShell scripts to automate deployment of python applications
+
+## use cases
+* non-coders
+* many devices
+* users need to update often
 
 ## End user usage (developers keep going)
 1. Download 3 files, *.bat, *.yml, *.ps1 All files must be in the same folder and not in a zip.
@@ -23,13 +28,15 @@ A set of PowerShell scripts to automate deployment of python applications to non
 * Multi-user installation option
 * Don’t need github access
 * Use for multiple apps (each gets own conda environment)
+* No GUI, headless/remote installs possible
 
 ### Features for python app developers
 * Updates distributed via git (uses git cli, so not tied to github.com)
 * Use SSH (deploy) keys to access private repos
 * No compiling or bundling
 * Optionally install National Instruments drivers
-* Environment file autodetect: priority highest to lowest - environment.yml > setup.py > requirements.txt
+* Environment file autodetect: priority highest to lowest - environment.yml > setup.py/pyproject.toml > requirements.txt
+* Detects developer install: uses existing git repos
 
 ## Developer Usage
 
@@ -76,6 +83,12 @@ applications:
 
 
 ## Contributing
+
+### Ideas
+* NoPrompt flag for non-interactive install
+* share conda environment between multiple applications via application.yml or gitpyup.yml
+* allow customization of National Instruments packages via gitpyup.yml
+* support additional WinGet packages via gitpyup.yml
 
 ### Development Guidelines
 * https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/strongly-encouraged-development-guidelines

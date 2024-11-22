@@ -5,7 +5,8 @@ param(
     # -UseDev switch to checkout dev branch instead of main
     [switch]$UseDev = $false,
     [switch]$AskInstallType = $false,  # not implemented
-    [string]$OriginalPath = $null
+    [string]$OriginalPath = $null,
+    [switch]$NoPrompt = $false  # not implemented
 )
 
 # variables
@@ -190,7 +191,7 @@ function Write-LogOrHost {
     }
 }
 
-Write-LogOrHost "DeployOn-Windows version: $scriptVersion"
+Write-LogOrHost "Hi you are running Deploy-gitpyup version: $scriptVersion"
 if ($DebugMode) {
     Write-LogOrHost "Debug mode is enabled"
     $Env:GITPYUP_DEPLOY_DEBUG = $true
