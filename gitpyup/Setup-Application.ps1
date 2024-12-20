@@ -1,4 +1,5 @@
 ﻿<#
+Copyright (c) 2024 3M Company
 This script creates or updates the python applications configured in gitpyup.
 #> 
 

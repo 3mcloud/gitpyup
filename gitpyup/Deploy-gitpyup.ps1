@@ -1,3 +1,7 @@
+<#
+Copyright (c) 2024 3M Company
+This script installs or updates gitpyup and its applications.
+#> 
 param(
     [string]$YamlFile = "",
     # '-debugMode' switch to enable debug mode
@@ -17,7 +21,7 @@ $installConfigFile = "installConfig.yaml"
 
 $defaultGitpyup = @{  # default gitpyup config
     name= $gpun
-    clone_uri= "https://github.com/3M-Cloud/gitpyup.git"
+    clone_uri= "https://github.com/3mcloud/gitpyup.git"
 }
 
 # Test working directory and move to the script directory if needed

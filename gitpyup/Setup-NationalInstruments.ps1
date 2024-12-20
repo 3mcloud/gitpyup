@@ -1,4 +1,8 @@
 #Requires -RunAsAdministrator
+<#
+Copyright (c) 2024 3M Company
+This script sets up National Instruments software using NI Package Manager.
+#> 
 
 # logging
 # check if Utility-Functions.ps1 is present
