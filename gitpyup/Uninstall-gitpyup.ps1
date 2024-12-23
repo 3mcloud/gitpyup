@@ -1,3 +1,8 @@
+<#
+Copyright (c) 2024 3M Company
+This script removes gitpyup shortcuts and repositories
+#> 
+
 $response = Read-Host -Prompt "Type 'uninstall' and press enter to remove gitpyup installed shortcuts and repositories. Miniforge and conda environments will be preserved."
 
 $scriptBlock = {

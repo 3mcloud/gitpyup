@@ -1,5 +1,5 @@
 # gitpyup
-A set of PowerShell scripts to automate deployment of python applications
+A set of PowerShell scripts to automate deployment of python applications. The automation includes cloning of application repos, installation of Miniforge, and setting up conda environments for each application.
 
 ## use cases
 * non-coders
@@ -19,7 +19,7 @@ A set of PowerShell scripts to automate deployment of python applications
 ## Features
 ### Features for everyone
 * Installs python optimized for enterprise environments (miniforge-cost,versatility,reproduceability)
-* Fixes “SSL certificate verify failed” for conda and pip
+* Attempts to fix “SSL certificate verify failed” for conda and pip
 
 ### Features for end-users
 * Update via start menu shortcut
@@ -59,12 +59,13 @@ shortcuts:  # generate shortcuts
 
 4. create config file: yourAppName.yml
 
-* In this example plotme is the application.  The gitpyup application is allways included. Application order doesn't matter.
+* In this example plotme is the only application.  Application order doesn't matter.
 ```yml
 # <your app name>.yml - name is up to you
 applications:
+# gitpyup can be placed here to override the default that is in Deploy-gitpyup.ps1
   - name: gitpyup
-    clone_uri: git@github.com:3M-Cloud/gitpyup.git
+    clone_uri: git@github.com:3Mcloud/gitpyup.git
     deploy_key: "replace with deploy key if needed"
   - name: plotme
     clone_uri: git@github.com:3mcloud/plotme.git
@@ -76,19 +77,29 @@ applications:
     2. yourAppName.yml
     3. run-elevated-first.bat
 
+## Script Descriptions
+* gitpyup/Deploy-gitpyup.ps1 - Initial setup and updates, clones repos, creates shortcuts
+* gitpyup/Setup-Python.ps1 - Installs/updates Miniforge
+* gitpyup/Setup-Application.ps1 - Creates/updates application  environments
+* gitpyup/Uninstall-gitpyup.ps1 - Removes start menu shortcuts, cloned repos
+* gitpyup/run-elevated-first.bat - Sets PowerShell policy and unblocks Deploy-gitpyup.ps1
+
 ### Standalone Modules
-* Setup-NationalInstruments.ps1 - modify $packages array to add or remove packages, run with elevated priveleges
+* gitpyup/Setup-NationalInstruments.ps1 - modify $packages array to add or remove packages, run with elevated priveleges
 
 ## FAQ 
 
 
 ## Contributing
 
-### Ideas
-* NoPrompt flag for non-interactive install
-* share conda environment between multiple applications via application.yml or gitpyup.yml
-* allow customization of National Instruments packages via gitpyup.yml
-* support additional WinGet packages via gitpyup.yml
+### Ideas in priority order
+1. Tests
+1. NoPrompt flag for non-interactive install so it can be used in CI/CD pipelines, add currently interactive configuration options to yourappname.yml
+1. Convert to powershell module and publish to PowerShell Gallery
+1. Modify Setup-Python.ps1 so it can be used standalone
+1. share conda environment between multiple applications via application.yml or gitpyup.yml
+1. allow customization of National Instruments packages via gitpyup.yml
+1. support additional WinGet packages via gitpyup.yml
 
 ### Development Guidelines
 * https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/strongly-encouraged-development-guidelines
