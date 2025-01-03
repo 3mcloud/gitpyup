@@ -16,7 +16,6 @@ param(
 # variables
 $scriptVersion = "v1"
 $gpun = "gitpyup"
-$Env:GITPYUPUTILSNAME = "Utility-Functions.ps1"
 $installConfigFile = "installConfig.yaml"
 
 $defaultGitpyup = @{  # default gitpyup config
@@ -54,9 +53,9 @@ $shortcutScript = {
         [array]$toAdd
     )
 
-    . "./$Env:GITPYUPUTILSNAME"
+    . "./Utility-Functions.ps1"
     Start-Logging
-
+    
     # TODO: check if have permissions to remove, if needed get permissions, ideally from existing elevated process
     # remove old shortcuts
     foreach ($shortcut in $toRemove) {
@@ -170,7 +169,7 @@ function Reset-Path {
 
 # save the Start-Logging function to a file
 # define the path to the file
-$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath $Env:GITPYUPUTILSNAME
+$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath "Utility-Functions.ps1"
 # Write the function to the file
 Set-Content -Force -Path $utilityFunctionsPath -Value $utilityString
 
@@ -268,9 +267,9 @@ $installSupportSoftware = {
         }
     }
 
-    . "./$Env:GITPYUPUTILSNAME"
-    Start-Logging -PrintVersion
-    
+    . "./Utility-Functions.ps1"
+    Start-Logging
+
     function Install-ViaWinget {
         param(
             [string]$AppTestCommand,
@@ -738,7 +737,7 @@ $installConfig = @{
 $response = ConvertTo-Yaml $installConfig -OutFile $installConfigPath
 Write-Log "The config yml has been written to $installConfigPath"
 
-if (-not (Test-Path $Env:GITPYUPUTILSNAME)){
+if (-not (Test-Path "Utility-Functions.ps1")){
     Copy-Item $utilityFunctionsPath .
     Write-Log "The application yml has been copied to $gitpyupScriptDir"
 }

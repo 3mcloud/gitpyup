@@ -4,8 +4,8 @@ This script installs Miniforge3 for the 3M corporate environment.
 It can be run as part of gitpyup for now.
 #> 
 
-# check if Utility-Functions.ps1 is present
-. "./$ENV:GITPYUPUTILSNAME"
+# run Utility-Functions.ps1 to get the utility functions
+. "./Utility-Functions.ps1"
 Start-Logging
 
 Write-Log "Setup-Python v1"
@@ -68,7 +68,7 @@ $MiniforgeInstall = {
         [hashtable]$Conda
     )
 
-    . "./$ENV:GITPYUPUTILSNAME"
+    . "./Utility-Functions.ps1"
     Start-Logging
 
     # remove Miniforge3 folder if it exists
@@ -118,7 +118,7 @@ $EnvSetupScript = {
     )
 
     # logging
-    . "./$ENV:GITPYUPUTILSNAME"
+    . "./Utility-Functions.ps1"
     Start-Logging
 
     # this sections is needed if the device is subject to SSL inspection

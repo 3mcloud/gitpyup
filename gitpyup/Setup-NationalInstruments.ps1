@@ -6,8 +6,8 @@ This script sets up National Instruments software using NI Package Manager.
 
 # logging
 # check if Utility-Functions.ps1 is present
-if (Test-Path "./$ENV:GITPYUPUTILSNAME") {
-    . "./$ENV:GITPYUPUTILSNAME"
+if (Test-Path "./Utility-Functions.ps1") {
+    . "./Utility-Functions.ps1"
     Start-Logging
 }
 function Write-LogOrHost {
