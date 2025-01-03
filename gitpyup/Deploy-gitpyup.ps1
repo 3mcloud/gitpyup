@@ -4,7 +4,7 @@ This script installs or updates gitpyup and its applications.
 #> 
 param(
     [string]$YamlFile = "",
-    # '-debugMode' switch to enable debug mode
+    # '-DebugMode' switch to enable debug mode
     [switch]$DebugMode = $false,
     # -UseDev switch to checkout dev branch instead of main
     [switch]$UseDev = $false,
@@ -16,12 +16,12 @@ param(
 # variables
 $scriptVersion = "v1"
 $gpun = "gitpyup"
-$ENV:GITPYUPUTILSNAME = "Utility-Functions.ps1"
+$Env:GITPYUPUTILSNAME = "Utility-Functions.ps1"
 $installConfigFile = "installConfig.yaml"
 
 $defaultGitpyup = @{  # default gitpyup config
-    name= $gpun
-    clone_uri= "https://github.com/3mcloud/gitpyup.git"
+    'name' = $gpun
+    'clone_uri' = "https://github.com/3mcloud/gitpyup.git"
 }
 
 # Test working directory and move to the script directory if needed
@@ -30,18 +30,18 @@ if (Test-Path "gitpyup") {
 }
 
 # shortcut parent depends on installation type
-$env:GITPYUP_SHORTCUT_PARENT_USER = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$gpun"
-$env:GITPYUP_SHORTCUT_PARENT_ALL = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$gpun"
+$Env:GITPYUP_SHORTCUT_PARENT_USER = "$Env:APPDATA\Microsoft\Windows\Start Menu\Programs\$gpun"
+$Env:GITPYUP_SHORTCUT_PARENT_ALL = "$Env:ProgramData\Microsoft\Windows\Start Menu\Programs\$gpun"
 $toRemove = @(
-    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-update.lnk"
-    "$env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-uninstall.lnk"
-    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-update.lnk"
-    "$env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-uninstall.lnk"
+    "$Env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-update.lnk"
+    "$Env:GITPYUP_SHORTCUT_PARENT_USER\$gpun-uninstall.lnk"
+    "$Env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-update.lnk"
+    "$Env:GITPYUP_SHORTCUT_PARENT_ALL\$gpun-uninstall.lnk"
 )
 
 # setup logging
-$sharepath  = $env:USERPROFILE + "\Downloads"
-$username   = $env:USERNAME
+$sharepath  = $Env:USERPROFILE + "\Downloads"
+$username   = $Env:USERNAME
 $hostname   = hostname
 $datetime   = Get-Date -f 'yyyyMMddHHmmss'
 $filename   = "Log-${username}-${hostname}-${datetime}.txt"
@@ -54,7 +54,7 @@ $shortcutScript = {
         [array]$toAdd
     )
 
-    . "./$ENV:GITPYUPUTILSNAME"
+    . "./$Env:GITPYUPUTILSNAME"
     Start-Logging
 
     # TODO: check if have permissions to remove, if needed get permissions, ideally from existing elevated process
@@ -147,7 +147,7 @@ function Start-Logging {
 
 function Reset-Path {
     # reload path from machine and user
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
+    $Env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
     ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
@@ -170,7 +170,7 @@ function Reset-Path {
 
 # save the Start-Logging function to a file
 # define the path to the file
-$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath $ENV:GITPYUPUTILSNAME
+$utilityFunctionsPath = Join-Path -Path (Get-Location).Path -ChildPath $Env:GITPYUPUTILSNAME
 # Write the function to the file
 Set-Content -Force -Path $utilityFunctionsPath -Value $utilityString
 
@@ -268,7 +268,7 @@ $installSupportSoftware = {
         }
     }
 
-    . "./$ENV:GITPYUPUTILSNAME"
+    . "./$Env:GITPYUPUTILSNAME"
     Start-Logging -PrintVersion
     
     function Install-ViaWinget {
@@ -343,13 +343,13 @@ if (!(Get-SupportStatus)) {
 # install type hash tables
 $installAll = @{
     'type' = "AllUsers"
-    'path' = "$env:ProgramData\$gpun"
-    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_ALL
+    'path' = "$Env:ProgramData\$gpun"
+    'shortcutParent' = $Env:GITPYUP_SHORTCUT_PARENT_ALL
 }
 $installUser = @{
     'type' = "SingleUser"
-    'path' = "$env:APPDATA\$gpun"
-    'shortcutParent' = $env:GITPYUP_SHORTCUT_PARENT_USER
+    'path' = "$Env:APPDATA\$gpun"
+    'shortcutParent' = $Env:GITPYUP_SHORTCUT_PARENT_USER
 }
 
 # determine install type
@@ -406,7 +406,7 @@ prompt can be confusing because it doesn't show the user's input when user
 types #>
 
 # create empty known_hosts file if it does not exist
-$knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
+$knownHosts = "$Env:USERPROFILE\.ssh\known_hosts"
 if (!(Test-Path $knownHosts)) {
     Write-Log "creating known_hosts file..."
     New-Item -Path $knownHosts -ItemType File -Force
@@ -433,9 +433,9 @@ function Set-DeployKeyPermissions {
         # Remove Inheritance:
         Icacls $Key /c /t /Inheritance:d
         # Set Ownership to Owner:
-            # Key's within $env:UserProfile:
+            # Key's within $Env:UserProfile:
             Icacls $Key /c /t /Grant ${env:UserName}:F
-            # Key's outside of $env:UserProfile:
+            # Key's outside of $Env:UserProfile:
             TakeOwn /F $Key
             Icacls $Key /c /t /Grant:r ${env:UserName}:F
         # Remove All Users, except for Owner:
@@ -626,6 +626,7 @@ if ($installConfigPathObject.Exists) {
 $toAdd = @() # initialize shortcuts to add array
 $appNames = @()  # used to check for duplicate
 $appConfigs = @()  # used to accumulate all the configs
+$tlsBundleURL = $null  # used to store the tls bundle path
 
 # load the yml files
 foreach ($file in $yamlFiles) {
@@ -633,6 +634,11 @@ foreach ($file in $yamlFiles) {
     $fileContent = Get-Content -Path $file.FullName -Raw
     $configRoot = ConvertFrom-Yaml $fileContent
     $apps = $configRoot.applications
+
+    # update tls-bundle URL if it exists and is not already set
+    if (($null -eq $tlsBundleURL) -and $configRoot.ContainsKey("tls_bundle")) {
+        $tlsBundleURL = $configRoot.tls_bundle
+    }
 
     # loop through each application
     foreach ($application in $apps) {
@@ -725,13 +731,14 @@ $installConfig = @{
     "applications" = $appConfigs
     "created_shortcuts" = $toAdd
     "install" = $install
+    "tls_bundle" = $tlsBundleURL
 }
 
 # save the config to a file
 $response = ConvertTo-Yaml $installConfig -OutFile $installConfigPath
 Write-Log "The config yml has been written to $installConfigPath"
 
-if (-not (Test-Path $ENV:GITPYUPUTILSNAME)){
+if (-not (Test-Path $Env:GITPYUPUTILSNAME)){
     Copy-Item $utilityFunctionsPath .
     Write-Log "The application yml has been copied to $gitpyupScriptDir"
 }
@@ -753,7 +760,8 @@ if ($Install.type -eq "AllUsers") {
     )
 }
 
-$env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
+$Env:GITPYUP_BUNDLE_URL = $tlsBundleURL
+$Env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
 
 $confirm = ""
 while(($confirm -ne "y") -and ($confirm -ne "n"))
@@ -799,7 +807,8 @@ foreach ($application in $appConfigs) {
     {
         $confirm = Read-Host -Prompt "Do you want to install or update $name ? (y/n)"
         if ($confirm -ceq "y") {
-            $proc = Start-Process -FilePath "powershell" -PassThru -ArgumentList "-Command & '.\Setup-Application.ps1' -AppConfig $application -InstallType $install.type"
+            $proc = Start-Process -FilePath "powershell" -PassThru `
+                -ArgumentList "-Command & '.\Setup-Application.ps1' -AppConfig $application -InstallType $($install.type)"
             $handle = $proc.Handle
             $proc.WaitForExit();
             if ($proc.ExitCode -ne 0) {
