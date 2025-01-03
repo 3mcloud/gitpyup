@@ -41,9 +41,8 @@ A set of PowerShell scripts to automate deployment of python applications. The a
 ## Developer Usage
 
 ### Deploy Application(s)
-1. generate read-only deploy key for your application repo
-2. generate yourself or request deploy key for gitpyup from Milo
-3. (optional) add gitpyup.yml to your application repo(s) to generate shortcuts and or set the environment file
+1. if application repos is private, generate read-only deploy key for your application repo
+2. (optional) add gitpyup.yml to your application repo(s) to generate shortcuts and or set the environment file
 
 ```yml
 # example contents of optional gitpyup.yml in root of application repo
@@ -57,22 +56,29 @@ shortcuts:  # generate shortcuts
     script: myscript.ps1
 ```
 
-4. create config file: yourAppName.yml
+3. create config file: yourAppName.yml
 
 * In this example plotme is the only application.  Application order doesn't matter.
 ```yml
 # <your app name>.yml - name is up to you
 applications:
-# gitpyup can be placed here to override the default that is in Deploy-gitpyup.ps1
+# optional, gitpyup can be placed here to override the default that is in Deploy-gitpyup.ps1
   - name: gitpyup
     clone_uri: git@github.com:3Mcloud/gitpyup.git
     deploy_key: "replace with deploy key if needed"
   - name: plotme
     clone_uri: git@github.com:3mcloud/plotme.git
-    deploy_key: "replace with deploy key if needed"
+    # example key format
+    deploy_key: |-
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      **********************************************
+      **********************************************
+      -----END OPENSSH PRIVATE KEY-----
+# optional, needed for HTTPS inspection compatability (usually corporate environments)
+tls_bundle: "https://raw.githubusercontent.com/<org/user>/<repo>/main/tls-ca-bundle.txt"
 ```
 
-5. upload 3 files somewhere your users can access
+4. upload 3 files somewhere your users can access
     1. Deploy-gitpyup.ps1
     2. yourAppName.yml
     3. run-elevated-first.bat

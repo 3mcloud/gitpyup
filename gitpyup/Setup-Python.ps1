@@ -1,4 +1,5 @@
 ﻿<#
+Copyright (c) 2024 3M Company
 This script installs Miniforge3 for the 3M corporate environment.
 It can be run as part of gitpyup for now.
 #> 
@@ -111,7 +112,7 @@ if (!($CondaVersion)) {
 
 $EnvSetupScript = {
     param(
-        [string]$Repo,
+        [string]$EnvName,
         [string]$MiniforgeInstallPath,
         [string]$InstallType
     )
@@ -120,45 +121,54 @@ $EnvSetupScript = {
     . "./$ENV:GITPYUPUTILSNAME"
     Start-Logging
 
-    $BundlePath = "$env:ProgramData\tls-ca-bundle.pem"
-    if (Test-Path $BundlePath) {
-        Remove-Item -Force $BundlePath
-    }
+    # this sections is needed if the device is subject to SSL inspection
+    # currently Minforge/conda does not have a way to use the system certs
+    # The bundle URL is set by an environment variable
+    if ($Env:GITPYUP_BUNDLE_URL) {
 
-    # this is needed if corporation uses a SSL inspection aka MitM attack
-    # this bundle is for our corporation
-    $URL = "https://raw.githubusercontent.com/nikolarobottesla/bacon/main/bits.txt"
-    Write-Log "downloading tls bundle..."
-    Invoke-WebRequest $URL -OutFile $BundlePath
-    # are these redundant because setting the .condarc file?
-    conda config --set ssl_verify True
-    conda config --set ssl_verify $BundlePath
+        # remove existing gitpyup-tls-ca-bundle.pem if it exists
+        $BundlePath = "$env:ProgramData\gitpyup-tls-ca-bundle.pem"
+        if (Test-Path $BundlePath) {
+            Remove-Item -Force $BundlePath
+        }
 
-    # Check for existing conda environment
-    # TODO get any existing conda environment directories
+        # download the tls bundle
+        $URL = $Env:GITPYUP_BUNDLE_URL
+        Write-Log "downloading tls bundle from $URL"
+        Invoke-WebRequest $URL -OutFile $BundlePath
+        # are these redundant because setting the .condarc file?
+        conda config --set ssl_verify True
+        conda config --set ssl_verify $BundlePath
 
-    # configure path to save environments depending on installation type
-    if ($InstallType -eq "AllUsers") {
-        $EnvDir = "$env:ProgramData\.conda\envs"
-    } else {
-        $EnvDir = "$env:UserProfile\.conda\envs"
-    }
+        # Check for existing conda environment
+        # TODO get any existing conda environment directories
 
-    # Create a .condarc file in the root dir of the MiniForge installation
-    $CondarcPath = "$MiniforgeInstallPath\.condarc"
-    $CondarcContent = 
+        # configure path to save environments depending on installation type
+        if ($InstallType -eq "AllUsers") {
+            $EnvDir = "$env:ProgramData\.conda\envs"
+        } else {
+            $EnvDir = "$env:UserProfile\.conda\envs"
+        }
+
+        # Create a .condarc file in the root dir of the MiniForge installation
+        $CondarcPath = "$MiniforgeInstallPath\.condarc"
+        $CondarcContent = 
 "channels:
     - conda-forge
 ssl_verify: $BundlePath
 envs_dirs:
-    - $EnvDir
-"
-    Set-Content -Force -Path $CondarcPath -Value $CondarcContent
+        - $EnvDir
+    "
+        Set-Content -Force -Path $CondarcPath -Value $CondarcContent
+
+    } else {
+        Write-Log "No bundle URL provided"
+    }
 
     # function to check if pip has SSL errors, return true if error detected
     function Test-PipTlsError {
         # Define the command
-        $Command = "conda run -n $Repo python -m pip install --dry-run tiny"
+        $Command = "conda run -n $EnvName python -m pip install --dry-run tiny"
         Write-Log "Running SSL test command: $Command"
         # Create a temporary file for output
         $TempFile = [System.IO.Path]::GetTempFileName()
@@ -169,7 +179,7 @@ envs_dirs:
         # Clean up the temporary file
         Remove-Item -Path $TempFile
 
-        # $TlsTest = conda run -n $Repo python -m pip install --dry-run tiny
+        # $TlsTest = conda run -n $EnvName python -m pip install --dry-run tiny
         if ($TlsTest | Select-String -Pattern "SSL: CERTIFICATE_VERIFY_FAILED") {
             Write-Log "pip SSL error detected"
             return $true
@@ -182,17 +192,17 @@ envs_dirs:
     # check if pip has SSL errors, install or uninstall pip-system-certs
     if (Test-PipTlsError) {
         # check if pip-system-certs is installed
-        if (!(conda run -n $Repo python -m pip list | Select-String -Pattern pip-system-certs)) {
+        if (!(conda run -n $EnvName python -m pip list | Select-String -Pattern pip-system-certs)) {
             # patch pip and requests to use system certs
             Write-Log "installing pip-system-certs..."
-            conda install -n $Repo pip-system-certs -y
-            # conda run -n $Repo python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip-system-certs
+            conda install -n $EnvName pip-system-certs -y
+            # conda run -n $EnvName python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip-system-certs
         }
 
         # check if pip still has SSL errors, set pip to use the tls-ca-bundle.pem
         if (Test-PipTlsError) {
             Write-Log "pip still has SSL errors, setting pip to use tls-ca-bundle.pem"
-            conda run -n $Repo python -m pip config set global.cert $BundlePath
+            conda run -n $EnvName python -m pip config set global.cert $BundlePath
         }
     }
 
