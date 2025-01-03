@@ -2,10 +2,12 @@
 
 echo run-elevated-v1
 
+pushd %~dp0
+
 if exist Deploy-gitpyup.ps1 goto check_Permissions
 
 :result_False
-    echo Ensure run-elevated-once.bat, Deploy-gitpyup.ps1 and your yaml file are extracted (may have downloaded .zip) and in the same directory.
+    echo Please try again!: Ensure run-elevated-first.bat and Deploy-gitpyup.ps1 are extracted (not in a zip file) and in the same directory.
     goto Done
 
 :check_Permissions
@@ -16,7 +18,7 @@ if exist Deploy-gitpyup.ps1 goto check_Permissions
         echo Success: Administrative permissions confirmed.
         goto set_Policies_Unblock
     ) else (
-        echo Failure: Current permissions inadequate, right click and select 'Run with Elevated Privileges'
+        echo Please try again!: Current permissions inadequate, right click and select 'Run with Elevated Privileges' or 'Run as Administrator'.
         goto Done
     )
     
@@ -29,3 +31,4 @@ if exist Deploy-gitpyup.ps1 goto check_Permissions
 
 :Done
     pause
+    popd
