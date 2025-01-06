@@ -114,7 +114,7 @@ if ($condaEnvList | Select-String -Pattern $condaEnvName) {
 if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt" -or $envFile -ieq "pyproject.toml") {
     # get version of python in base environment
     $response = conda run -n base python --version
-    if ($response -match "Python (\d+\.\d+\.\d+)") {
+    if (($response | Out-String) -match "Python (\d+\.\d+\.\d+)") {
         $basePythonVersion = $matches[1]
         Write-Log "base environment Python version: $basePythonVersion"
     } else {
@@ -123,18 +123,18 @@ if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt" -or $envFile -
     }
     # get current version of python in environment, install if not found
     $response = conda run -n $condaEnvName python --version
-    if ($response -match "Python (\d+\.\d+\.\d+)") {
+    if (($response | Out-String) -match "Python (\d+\.\d+\.\d+)") {
         $pythonVersion = $matches[1]
         Write-Log "$condaEnvName environment Python version: $pythonVersion"
     } else {
         Write-Log "It is normal to see 'Python was not found' above this message."
-        Write-Log "Installing Python=$basePythonVersion into $condaEnvName environment..."
+        Write-Log "Installing Python=$basePythonVersion into $condaEnvName conda environment..."
         $response = conda install -n $condaEnvName python=$basePythonVersion -y
         Write-Log ($response | Out-String)
     }
     # if versions don't match update python
     if ($pythonVersion -ne $basePythonVersion) {
-        Write-Log "Updating to Python=$basePythonVersion in $condaEnvName environment..."
+        Write-Log "Updating to Python=$basePythonVersion in $condaEnvName conda environment..."
         $response = conda install -n $condaEnvName python=$basePythonVersion -y
         Write-Log ($response | Out-String)
     }
@@ -158,7 +158,7 @@ While (!($Success) -and ($NumAttempts -lt 5)) {
 
     if ($Success) {
         Write-Log ($response | Out-String)
-        Write-Log "Successfully installed or updated"
+        Write-Log "Successfully installed or updated $appName in $condaEnvName conda environment"
         # environment files have no permissions for 'Users' group
         if ($InstallType -eq "AllUsers") {
             Write-Log "Granting permissions to env folder. This can take over 30 minutes..."
