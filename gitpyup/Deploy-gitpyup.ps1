@@ -814,10 +814,13 @@ foreach ($application in $appConfigs) {
         $confirm = Read-Host -Prompt "Do you want to install or update $name ? (y/n)"
         if ($confirm -ceq "y") {
             $pinfo.Arguments = "-Command & './Setup-Application.ps1' " + 
-                "-Name $($application.name) " +
-                "-Path $($application.path) " +
-                "-EnvironmentFile $($application.environment_file) " +
-                "-InstallType $($install.type)"
+                "-Name $name " +
+                "-Path $($application.path) "
+            # if $application contains environment_file key use it else use null
+            if ($application.ContainsKey("environment_file")) {
+                $pinfo.Arguments += "-EnvironmentFile $($application.environment_file) "
+            }
+            $pinfo.Arguments += "-InstallType $($install.type)"
             $p = New-Object System.Diagnostics.Process
             $p.StartInfo = $pinfo
             $p.Start() | Out-Null
