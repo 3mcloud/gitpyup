@@ -121,6 +121,9 @@ $EnvSetupScript = {
     . "./Utility-Functions.ps1"
     Start-Logging
 
+    # this prevents a halts due to an interactive conda message about reporting errors
+    conda config --set report_errors false
+
     # this sections is needed if the device is subject to SSL inspection
     # currently Minforge/conda does not have a way to use the system certs
     # The bundle URL is set by an environment variable
