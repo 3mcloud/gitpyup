@@ -1,0 +1,9 @@
+name: gitpyup-test
+channels:
+  - conda-forge
+dependencies:
+  - pip
+  - python=3.13
+  - pip-system-certs
+  - pip:
+    - psutil

@@ -794,24 +794,41 @@ while(($confirm -ne "y") -and ($confirm -ne "n"))
     }
 }
 
+$pinfo = New-Object System.Diagnostics.ProcessStartInfo
+$pinfo.FileName = "powershell"
+$pinfo.RedirectStandardError = $true
+$pinfo.RedirectStandardOutput = $false
+$pinfo.UseShellExecute = $false
+$pinfo.CreateNoWindow = $false  # doesn't seem to open a window but when false does output to console
+$pinfo.WorkingDirectory = (Get-Location).Path
+
 # create or update the python environment for each application
 foreach ($application in $appConfigs) {
     $name = $application.name
     # gitpyup is not a python application
-    if ($application.name -eq $gpun) {
+    if ($name -eq $gpun) {
         continue
     }
     $confirm = ""
-    while(($confirm -ne "y") -and ($confirm -ne "n"))
-    {
+    while(($confirm -ne "y") -and ($confirm -ne "n")) {
         $confirm = Read-Host -Prompt "Do you want to install or update $name ? (y/n)"
         if ($confirm -ceq "y") {
-            $proc = Start-Process -FilePath "powershell" -PassThru `
-                -ArgumentList "-Command & '.\Setup-Application.ps1' -AppConfig $application -InstallType $($install.type)"
-            $handle = $proc.Handle
-            $proc.WaitForExit();
-            if ($proc.ExitCode -ne 0) {
-                Write-Log "Python environment setup failed for $name, re-run $gpun-update shortcut to try again." -Level 'ERROR'
+            $pinfo.Arguments = "-Command & './Setup-Application.ps1' " + 
+                "-Name $($application.name) " +
+                "-Path $($application.path) " +
+                "-EnvironmentFile $($application.environment_file) " +
+                "-InstallType $($install.type)"
+            $p = New-Object System.Diagnostics.Process
+            $p.StartInfo = $pinfo
+            $p.Start() | Out-Null
+            $p.WaitForExit()
+            if ($p.ExitCode -ne 0) {
+                Write-Log "Python environment setup failed for $name, Run $gpun-update shortcut to try again!" -Level 'ERROR'
+                Write-Log "exit code: $($p.ExitCode)"  -Level 'ERROR'
+                $stderr = $p.StandardError.ReadToEnd()
+                if ($stderr) {
+                    Write-Log "stderr: $stderr" -Level 'ERROR'
+                }
             } else {
                 Write-Log "Python environment setup complete for $name."
             }

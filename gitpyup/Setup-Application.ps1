@@ -4,25 +4,27 @@ This script creates or updates the python applications configured in gitpyup.
 #> 
 
 param(
-    [hashtable]$AppConfig = @{},
+    [string]$Name = "",
+    [string]$Path = "",
+    [string]$EnvironmentFile = "",
     [string]$InstallType = "SingleUser",
     [string]$LocalConfigYaml = "gitpyup.yml"
 )
 
 # logging
-. "./$ENV:GITPYUPUTILSNAME"
+. "./Utility-Functions.ps1"
 Start-Logging
 
 Write-Log "Setup-Application v1"
 
-if ($AppConfig.ContainsKey("name")) {
-    $appName = $AppConfig["name"]
+if ($Name) {
+    $appName = $Name
 } else {
     $appName = Split-Path (Get-Location).Path -Parent
 }
 
-if ($AppConfig.ContainsKey("path")) {
-    $appPath = $AppConfig["path"]
+if ($Path) {
+    $appPath = $Path
 } else {
     $appPath = (Get-Location).Path
 }
@@ -30,10 +32,12 @@ if ($AppConfig.ContainsKey("path")) {
 # load repo config
 $configYmlPath = Join-Path $appPath $LocalConfigYaml
 if (Test-Path $configYmlPath) {
+    Write-Log "Using config file $configYmlPath"
     # config file found
     $repoConfigRaw = Get-Content -Path $configYmlPath -Raw
     $repoConfig = ConvertFrom-Yaml $repoConfigRaw
 } else {
+    Write-Log "No config file found in $appPath"
     $repoConfig = @{}
 }
 
@@ -49,7 +53,9 @@ $envFiles = @(
 )
 # auto-detect environment file
 foreach ($autoEnvFile in $envFiles) {
+    #LINUX #MACOS make case insensitive
     if (Test-Path (Join-Path $appPath $autoEnvFile)) {
+        Write-Log "Automatically found environment file $autoEnvFile"
         break
     }
 }
@@ -60,8 +66,8 @@ if ($repoConfig.ContainsKey("environment_file")) {
 }
 
 # app config has priority over repo config
-if ($AppConfig.ContainsKey("environment_file")) {
-    $envFile = $AppConfig["environment_file"]
+if ($EnvironmentFile) {
+    $envFile = $EnvironmentFile
 }
 
 # if environment file exists continue if not return error
@@ -71,38 +77,41 @@ if (Test-Path $envFilePath -PathType Leaf) {
     Write-Log "Using environment file $envFilePath"
 } elseif (Test-Path $autoEnvFilePath -PathType Leaf) {
     $envFilePath = $autoEnvFilePath
-    Write-Log "Automatically found environment file $envFilePath"
+    Write-Log "Using automatically found environment file $autoEnvFilePath"
 } else {
-    Write-Log "No environment file found in $appPath" -Level "ERROR"
-    Return 1
+    $message = "No environment file found in $appPath"
+    Write-Log "$message" -Level "ERROR"
+    Exit 1
 }
 
-# check for existing conda environment, create if not found
+# set environment file type and condaEnvName
+$envFile = Split-Path $envFilePath -Leaf
 $condaEnvName = $appName
-$condaEnvList = conda env list
-if ($condaEnvList | Select-String -Pattern $condaEnvName) {
-    Write-Log "Conda environment $condaEnvName already exists"
-} else {
-    Write-Log "Creating conda environment $condaEnvName"
-    $response = conda create -n $condaEnvName
-    Write-Log ($response | Out-String)
-}
 
 # configure install/update command
-if ($envFile -ieq "environment.yml" -or $envFile -ieq "environment.yaml") {
+if ($envFile.Contains(".yml") -or $envFile.Contains(".yaml")) {
     $installCommand = "conda env update -n $condaEnvName --file $envFilePath --prune"
-    $successString = "Successfully installed "
 } elseif ($envFile -ieq "setup.py" -or $envFile -ieq "pyproject.toml") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -e $appPath"
 } elseif ($envFile -ieq "requirements.txt") {
     $installCommand = "conda run -n $condaEnvName python -m pip install -r $envFilePath"
 } else {
     Write-Log "Unsupported environment file $envFile" -Level "ERROR"
-    Return 1
+    Exit 1
+}
+
+# check for existing conda environment, create if not found
+$condaEnvList = conda env list
+if ($condaEnvList | Select-String -Pattern $condaEnvName) {
+    Write-Log "Conda environment $condaEnvName exists"
+} else {
+    Write-Log "Creating conda environment $condaEnvName"
+    $response = conda create -n $condaEnvName
+    Write-Log ($response | Out-String)
 }
 
 # install or update python into environment
-if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt") {
+if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt" -or $envFile -ieq "pyproject.toml") {
     # get version of python in base environment
     $response = conda run -n base python --version
     if ($response -match "Python (\d+\.\d+\.\d+)") {
@@ -110,7 +119,7 @@ if ($envFile -ieq "setup.py" -or $envFile -ieq "requirements.txt") {
         Write-Log "base environment Python version: $basePythonVersion"
     } else {
         Write-Log "No Python found in base environment." -Level "ERROR"
-        return 1
+        Exit 1
     }
     # get current version of python in environment, install if not found
     $response = conda run -n $condaEnvName python --version
@@ -147,11 +156,6 @@ While (!($Success) -and ($NumAttempts -lt 5)) {
         $Success = $False
     }
 
-    # success string based test overrides exit code
-    if ($successString) {
-        $Success = $response | Select-String -Pattern $successString
-    }
-
     if ($Success) {
         Write-Log ($response | Out-String)
         Write-Log "Successfully installed or updated"
@@ -162,6 +166,7 @@ While (!($Success) -and ($NumAttempts -lt 5)) {
             icacls $EnvPath /grant:r "Users:(OI)(CI)F" /T /Q # full permissions
         }
     } else {
+        Write-Log "Attempt $NumAttempts failed to install or update" -Level "ERROR"
         Write-Log ($response | Out-String) -Level "ERROR"
     }
     $NumAttempts++
@@ -172,4 +177,4 @@ if ($Env:GITPYUP_DEPLOY_DEBUG) {
     Read-Host -Prompt "Press enter key to exit" | Out-Null
 }
 
-Return $LASTEXITCODE
+Exit $installExitCode
