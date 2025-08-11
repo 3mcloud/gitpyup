@@ -22,17 +22,15 @@ function Write-LogOrHost {
     }
 }
 
-Write-LogOrHost "Setup-NationalInstruments v1"
-
 $ProgressPreference = 'SilentlyContinue'  # speeds up Invoke-WebRequest
 
 $nipm = "$Env:Programfiles\National Instruments\NI Package Manager\nipkg.exe"
 
+$ni4882Version = "25.0.0"
+$visaVersion = "25.3.0"
 $pkg_root = "https://download.ni.com/support/nipkg/products"
-$ni4882Version = "23.5"
-$visaVersion = "24.0"
 
-# array to configure packages
+# array to loop packages
 $packages = @(
     [pscustomobject]@{
         installID = "ni-488.2";
@@ -48,7 +46,7 @@ $packages = @(
 if (!(Test-Path $nipm)) {
     Write-LogOrHost "NI package manager not installed, downloading..."
     # Download NIPM. The URL can be passed as an argument.
-    $nipmUrl ="https://download.ni.com/support/nipkg/products/ni-package-manager/installers/NIPackageManager24.3.0.exe"
+    $nipmUrl = "https://download.ni.com/support/nipkg/products/ni-package-manager/installers/NIPackageManager25.5.0.exe"
     powershell.exe -Command `
     $ErrorActionPreference = 'Stop'; `
     Invoke-WebRequest -Uri $nipmUrl -OutFile NIPM_installer.exe ; `

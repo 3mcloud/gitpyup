@@ -15,8 +15,6 @@ param(
 . "./Utility-Functions.ps1"
 Start-Logging
 
-Write-Log "Setup-Application v1"
-
 if ($Name) {
     $appName = $Name
 } else {
