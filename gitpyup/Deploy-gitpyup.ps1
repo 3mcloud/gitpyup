@@ -14,7 +14,8 @@ param(
 )
 
 # variables
-$scriptVersion = "v1"
+
+$version = "1.1.0"
 $gpun = "gitpyup"
 $installConfigFile = "installConfig.yaml"
 
@@ -194,7 +195,7 @@ function Write-LogOrHost {
     }
 }
 
-Write-LogOrHost "Hi you are running Deploy-gitpyup version: $scriptVersion"
+Write-LogOrHost "Hi you are running Deploy-gitpyup version: $version"
 if ($DebugMode) {
     Write-LogOrHost "Debug mode is enabled"
     $Env:GITPYUP_DEPLOY_DEBUG = $true
@@ -625,7 +626,6 @@ if ($installConfigPathObject.Exists) {
 $toAdd = @() # initialize shortcuts to add array
 $appNames = @()  # used to check for duplicate
 $appConfigs = @()  # used to accumulate all the configs
-$tlsBundleURL = $null  # used to store the tls bundle path
 
 # load the yml files
 foreach ($file in $yamlFiles) {
@@ -633,11 +633,6 @@ foreach ($file in $yamlFiles) {
     $fileContent = Get-Content -Path $file.FullName -Raw
     $configRoot = ConvertFrom-Yaml $fileContent
     $apps = $configRoot.applications
-
-    # update tls-bundle URL if it exists and is not already set
-    if (($null -eq $tlsBundleURL) -and $configRoot.ContainsKey("tls_bundle")) {
-        $tlsBundleURL = $configRoot.tls_bundle
-    }
 
     # loop through each application
     foreach ($application in $apps) {
@@ -730,7 +725,6 @@ $installConfig = @{
     "applications" = $appConfigs
     "created_shortcuts" = $toAdd
     "install" = $install
-    "tls_bundle" = $tlsBundleURL
 }
 
 # save the config to a file
@@ -759,7 +753,6 @@ if ($Install.type -eq "AllUsers") {
     )
 }
 
-$Env:GITPYUP_BUNDLE_URL = $tlsBundleURL
 $Env:GITPYUP_INSTALL_PARENT = Split-Path -Path $install.path -Parent
 
 $confirm = ""

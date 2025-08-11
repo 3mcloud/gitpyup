@@ -74,8 +74,6 @@ applications:
       **********************************************
       **********************************************
       -----END OPENSSH PRIVATE KEY-----
-# optional, needed for HTTPS inspection compatability (usually corporate environments)
-tls_bundle: "https://raw.githubusercontent.com/<org/user>/<repo>/main/tls-ca-bundle.txt"
 ```
 
 4. upload 3 files somewhere your users can access

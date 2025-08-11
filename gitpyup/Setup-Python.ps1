@@ -1,6 +1,6 @@
 ﻿<#
 Copyright (c) 2024 3M Company
-This script installs Miniforge3 for the 3M corporate environment.
+This script installs Miniforge3.
 It can be run as part of gitpyup for now.
 #> 
 
@@ -8,9 +8,7 @@ It can be run as part of gitpyup for now.
 . "./Utility-Functions.ps1"
 Start-Logging
 
-Write-Log "Setup-Python v1"
-
-# check if admin and warn
+# check if admin and exit if true
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $RunningAsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($RunningAsAdmin) {
@@ -18,6 +16,7 @@ if ($RunningAsAdmin) {
         Remove-Item -Force "$Env:TEMP\gitpyup-as-admin"
     } else {
         Write-Log "Please run this script as a regular user"
+        Wait-Logging
         Read-Host -Prompt "Press enter key to exit" | Out-Null
         exit
     }
@@ -78,12 +77,29 @@ $MiniforgeInstall = {
         Write-Log "...Miniforge folder removed"
     }
 
-    Write-Log "Miniforge not installed, downloading..."
-    $Link = "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe"
-    Invoke-WebRequest $Link -OutFile "$env:UserProfile\Downloads\Miniforge3-Windows-x86_64.exe"
+    # check current folder for Miniforge exe
+    $InstallerName = "Miniforge3-Windows-x86_64.exe"
+    $DownloadLocation = "$env:UserProfile\Downloads\$InstallerName"
+
+    if (Test-Path $InstallerName) {
+        Write-Log "Miniforge already downloaded"
+        $Installer = "$PWD\$InstallerName"
+    } else {
+        if (Test-Path $DownloadLocation) {
+            Write-Log "Miniforge already downloaded"
+        } else {
+            Write-Log "Miniforge downloading..."
+            $Link = "https://github.com/conda-forge/miniforge/releases/latest/download/$InstallerName"
+            Invoke-WebRequest $Link -OutFile $DownloadLocation
     Write-Log "...Miniforge downloaded"
+        }
+        $Installer = $DownloadLocation
+    }
+
+    # unblock the installer
+    Unblock-File $Installer
+    
     Write-Log "Installing Miniforge..."
-    $Installer = "$env:UserProfile\Downloads\Miniforge3-Windows-x86_64.exe"
     $ArgumentList = "/InstallationType=JustMe /RegisterPython=1 /AddToPath=0 /S /D=$MiniforgeInstallPath"
     $Proc = Start-Process $Installer -Wait -ArgumentList $ArgumentList -PassThru
     if ($Proc.ExitCode -ne 0) {
@@ -100,15 +116,29 @@ $MiniforgeInstall = {
     $Proc = Start-Process @Conda -ArgumentList init
     Write-Log "...Miniforge initialized"
 }
+$MiniforgeInstallArgs = $MiniforgeInstallPath, $InstallType, $Conda
+$MiniforgeInstallEncoded, $MiniforgeInstallArgsEncoded = ConvertTo-Base64String $MiniforgeInstall $MiniforgeInstallArgs
 
 # Check if miniforge's conda.bat runs
-$CondaVersion = conda --version
-if (!($CondaVersion)) {
+$CondaVersion = Get-StandardOutput -Command "conda --version"
+if ($CondaVersion | Select-String -Pattern "CommandNotFoundException") {
+    if ($InstallType -eq "AllUsers") {
+        # Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
+        Start-Process -FilePath "powershell" -Wait -NoNewWindow -ArgumentList (
+            "-EncodedCommand $MiniforgeInstallEncoded",
+            "-EncodedArguments $MiniforgeInstallArgsEncoded"
+        )
+    } else {
     & $MiniforgeInstall $MiniforgeInstallPath $InstallType $Conda
+    }
 } else {
     Write-Log "Miniforge3 already available"
     Write-Log "version: $CondaVersion"
 }
+
+# need to update to recent conda version for truststore support
+Write-Log "updating conda base env..."
+$Proc = Start-Process @Conda -ArgumentList "update -n base -c conda-forge conda -y"
 
 $EnvSetupScript = {
     param(
@@ -124,90 +154,29 @@ $EnvSetupScript = {
     # this prevents a halts due to an interactive conda message about reporting errors
     conda config --set report_errors false
 
-    # this sections is needed if the device is subject to SSL inspection
-    # currently Minforge/conda does not have a way to use the system certs
-    # The bundle URL is set by an environment variable
-    if ($Env:GITPYUP_BUNDLE_URL) {
+    # set conda to use the system truststore
+    conda config --set ssl_verify truststore
 
-        # remove existing gitpyup-tls-ca-bundle.pem if it exists
-        $BundlePath = "$env:ProgramData\gitpyup-tls-ca-bundle.pem"
-        if (Test-Path $BundlePath) {
-            Remove-Item -Force $BundlePath
-        }
-
-        # download the tls bundle
-        $URL = $Env:GITPYUP_BUNDLE_URL
-        Write-Log "downloading tls bundle from $URL"
-        Invoke-WebRequest $URL -OutFile $BundlePath
-        # are these redundant because setting the .condarc file?
-        conda config --set ssl_verify True
-        conda config --set ssl_verify $BundlePath
-
-        # Check for existing conda environment
-        # TODO get any existing conda environment directories
-
-        # configure path to save environments depending on installation type
-        if ($InstallType -eq "AllUsers") {
-            $EnvDir = "$env:ProgramData\.conda\envs"
-        } else {
-            $EnvDir = "$env:UserProfile\.conda\envs"
-        }
-
-        # Create a .condarc file in the root dir of the MiniForge installation
-        $CondarcPath = "$MiniforgeInstallPath\.condarc"
-        $CondarcContent = 
+    # Check for existing conda environment
+    # configure path to save environments depending on installation type
+    if ($InstallType -eq "AllUsers") {
+        $EnvDir = "$env:ProgramData\.conda\envs"
+    } else {
+        $EnvDir = "$env:UserProfile\.conda\envs"
+}
+    # make sure the envs directory exists
+    New-Item -Path $EnvDir -ItemType Directory -Force
+    # Create a .condarc file in the root dir of the MiniForge installation
+    $CondarcPath = "$MiniforgeInstallPath\.condarc"
+    $CondarcContent = 
 "channels:
     - conda-forge
-ssl_verify: $BundlePath
+ssl_verify: truststore
 envs_dirs:
         - $EnvDir
     "
-        Set-Content -Force -Path $CondarcPath -Value $CondarcContent
+    Set-Content -Force -Path $CondarcPath -Value $CondarcContent
 
-    } else {
-        Write-Log "No bundle URL provided"
-    }
-
-    # function to check if pip has SSL errors, return true if error detected
-    function Test-PipTlsError {
-        # Define the command
-        $Command = "conda run -n $EnvName python -m pip install --dry-run tiny"
-        Write-Log "Running SSL test command: $Command"
-        # Create a temporary file for output
-        $TempFile = [System.IO.Path]::GetTempFileName()
-        # Execute the command and redirect output to the temporary file
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-Command", $Command -RedirectStandardOutput $TempFile -NoNewWindow -Wait
-        # Read the output from the temporary file
-        $TlsTest = Get-Content -Path $TempFile
-        # Clean up the temporary file
-        Remove-Item -Path $TempFile
-
-        # $TlsTest = conda run -n $EnvName python -m pip install --dry-run tiny
-        if ($TlsTest | Select-String -Pattern "SSL: CERTIFICATE_VERIFY_FAILED") {
-            Write-Log "pip SSL error detected"
-            return $true
-        } else {
-            Write-Log "pip SSL error not detected"
-            return $false
-        }
-    }
-
-    # check if pip has SSL errors, install or uninstall pip-system-certs
-    if (Test-PipTlsError) {
-        # check if pip-system-certs is installed
-        if (!(conda run -n $EnvName python -m pip list | Select-String -Pattern pip-system-certs)) {
-            # patch pip and requests to use system certs
-            Write-Log "installing pip-system-certs..."
-            conda install -n $EnvName pip-system-certs -y
-            # conda run -n $EnvName python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip-system-certs
-        }
-
-        # check if pip still has SSL errors, set pip to use the tls-ca-bundle.pem
-        if (Test-PipTlsError) {
-            Write-Log "pip still has SSL errors, setting pip to use tls-ca-bundle.pem"
-            conda run -n $EnvName python -m pip config set global.cert $BundlePath
-        }
-    }
 
     # attempt to update conda base environment
     Write-Log "updating conda base env..."
@@ -216,6 +185,7 @@ envs_dirs:
 
     # only wait if in debug mode
     if ($Env:GITPYUP_DEPLOY_DEBUG) {
+        Wait-Logging
         Read-Host -Prompt "Press enter key to exit" | Out-Null
     }
 }
