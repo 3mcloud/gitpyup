@@ -26,8 +26,8 @@ $ProgressPreference = 'SilentlyContinue'  # speeds up Invoke-WebRequest
 
 $nipm = "$Env:Programfiles\National Instruments\NI Package Manager\nipkg.exe"
 
-$ni4882Version = "25.0.0"
-$visaVersion = "25.3.0"
+$ni4882Version = "25.5"
+$visaVersion = "25.3"
 $pkg_root = "https://download.ni.com/support/nipkg/products"
 
 # array to loop packages

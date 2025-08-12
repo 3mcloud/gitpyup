@@ -11,6 +11,11 @@ a date of UNRELEASED (e.g. `[1.2.0] - UNRELEASED`). This will allow the release
 action to catch the correct changelog section even if the release date hasn't
 been set yet.
 
+## [1.1.1] - UNRELEASED
+### Fixed
+- NI pkg versions
+- Missing utility function Get-StandardOutput
+
 ## [1.1.0] - 2025-08-11
 
 ### Fixed

@@ -15,7 +15,7 @@ param(
 
 # variables
 
-$version = "1.1.0"
+$version = "1.1.1"
 $gpun = "gitpyup"
 $installConfigFile = "installConfig.yaml"
 
@@ -131,6 +131,26 @@ function ConvertTo-Base64String {
     }
 }
 
+# run a command and return the standard output
+# useful to run command which errors during normal operation
+# avoids user becoming concerned by hiding the standard output
+# Start-Process adds ~10 seconds to the execution time on my machine
+function Get-StandardOutput {
+    param(
+        [string]$Command
+    )
+    # Create a temporary file for output
+    $TempFile = [System.IO.Path]::GetTempFileName()
+    # Execute the command and redirect output to the temporary file
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-Command", $Command -RedirectStandardOutput $TempFile -NoNewWindow -Wait
+    # Read the output from the temporary file
+    $Response = Get-Content -Path $TempFile
+    # Clean up the temporary file
+    Remove-Item -Path $TempFile
+
+    return $Response
+}
+
 function Start-Logging {
     param(
         [switch]$PrintVersion = $false
@@ -165,6 +185,9 @@ function ConvertTo-Base64String {
 }
 function Reset-Path {
 ' + ${function:Reset-Path} + '
+}
+function Get-StandardOutput {
+' + ${function:Get-StandardOutput} + '
 }
 '
 
