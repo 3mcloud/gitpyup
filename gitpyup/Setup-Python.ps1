@@ -136,10 +136,6 @@ if ($CondaVersion | Select-String -Pattern "CommandNotFoundException") {
     Write-Log "version: $CondaVersion"
 }
 
-# need to update to recent conda version for truststore support
-Write-Log "updating conda base env..."
-$Proc = Start-Process @Conda -ArgumentList "update -n base -c conda-forge conda -y"
-
 $EnvSetupScript = {
     param(
         [string]$EnvName,
@@ -152,7 +148,7 @@ $EnvSetupScript = {
     Start-Logging
 
     # this prevents a halts due to an interactive conda message about reporting errors
-    conda config --set report_errors false
+    conda config --set report_errors false   
 
     # set conda to use the system truststore
     conda config --set ssl_verify truststore
@@ -163,7 +159,8 @@ $EnvSetupScript = {
         $EnvDir = "$env:ProgramData\.conda\envs"
     } else {
         $EnvDir = "$env:UserProfile\.conda\envs"
-}
+    }
+    
     # make sure the envs directory exists
     New-Item -Path $EnvDir -ItemType Directory -Force
     # Create a .condarc file in the root dir of the MiniForge installation
@@ -176,7 +173,6 @@ envs_dirs:
         - $EnvDir
     "
     Set-Content -Force -Path $CondarcPath -Value $CondarcContent
-
 
     # attempt to update conda base environment
     Write-Log "updating conda base env..."
