@@ -54,9 +54,10 @@ if ($MiniforgeInstallPath) {
 }
 
 $MiniforgeInstallPath = $ExpectedInstallPath
+$CondaBat = "$MiniforgeInstallPath\condabin\conda.bat"
 $Conda = @{
-    FilePath = "$MiniforgeInstallPath\condabin\conda.bat"
-    NoNewWindow = $true 
+    FilePath = $CondaBat
+    NoNewWindow = $true
     Wait = $true
 }
 
@@ -120,7 +121,7 @@ $MiniforgeInstallArgs = $MiniforgeInstallPath, $InstallType, $Conda
 $MiniforgeInstallEncoded, $MiniforgeInstallArgsEncoded = ConvertTo-Base64String $MiniforgeInstall $MiniforgeInstallArgs
 
 # Check if miniforge's conda.bat runs
-$CondaVersion = Get-StandardOutput -Command "conda --version"
+$CondaVersion = Get-StandardOutput -Command "$CondaBat --version"
 if ($CondaVersion | Select-String -Pattern "CommandNotFoundException") {
     if ($InstallType -eq "AllUsers") {
         # Start-Process -FilePath "powershell" -Verb RunAs -Wait -ArgumentList (
@@ -135,6 +136,10 @@ if ($CondaVersion | Select-String -Pattern "CommandNotFoundException") {
     Write-Log "Miniforge3 already available"
     Write-Log "version: $CondaVersion"
 }
+
+# in case installed but not initialized
+$Proc = Start-Process @Conda -ArgumentList init
+Write-Log "...Miniforge initialized"
 
 $EnvSetupScript = {
     param(
